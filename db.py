@@ -1,10 +1,20 @@
 import os
 import sqlite3
 import datetime
+from datetime import timezone, timedelta
 import hashlib
 import secrets
 
 DB_NAME = os.path.join(os.path.dirname(__file__), "lunch_mate.db")
+
+
+def kst_today() -> datetime.date:
+    """Return today's date in Asia/Seoul (KST), independent of server timezone."""
+    return (datetime.datetime.now(timezone.utc) + timedelta(hours=9)).date()
+
+
+def kst_today_iso() -> str:
+    return kst_today().isoformat()
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -204,19 +214,24 @@ def get_connection():
 
 
 def reset_today_data():
-    """Delete *today-ish* requests/status/groups for a clean test run.
+    """Delete today's requests/status/groups for a clean test run (KST-based).
 
-    Streamlit Cloud may run in UTC while users are in KST, so we clear a 3-day window
-    (yesterday/today/tomorrow) to reliably wipe "today" data.
+    To handle timezone drift (server UTC vs users KST), we clear a small window around
+    both KST-today and UTC-today.
 
     NOTE: users table is untouched.
     """
-    base = datetime.date.today()
-    dates = [(base + datetime.timedelta(days=d)).isoformat() for d in (-1, 0, 1)]
+    base_kst = kst_today()
+    base_utc = datetime.datetime.now(timezone.utc).date()
+
+    date_set = set()
+    for base in (base_kst, base_utc):
+        for d in (-1, 0, 1):
+            date_set.add((base + datetime.timedelta(days=d)).isoformat())
 
     conn = get_connection()
     c = conn.cursor()
-    for ds in dates:
+    for ds in sorted(date_set):
         c.execute("DELETE FROM requests WHERE date=?", (ds,))
         c.execute("DELETE FROM daily_status WHERE date=?", (ds,))
         c.execute("DELETE FROM group_members WHERE date=?", (ds,))

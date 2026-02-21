@@ -48,7 +48,10 @@ _auto_login_from_query()
 
 def main():
     # hidden reset switch for testing
-    if st.query_params.get("reset") == "today":
+    reset_v = st.query_params.get("reset")
+    if isinstance(reset_v, list):
+        reset_v = reset_v[0] if reset_v else None
+    if reset_v == "today":
         db.reset_today_data()
         st.query_params.clear()
         st.success("오늘 점약 데이터 초기화 완료")
