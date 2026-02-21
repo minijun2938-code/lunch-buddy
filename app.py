@@ -28,6 +28,7 @@ cookies = get_cookie_manager()
 
 # Auto-login from cookie if session_state empty
 if "user" not in st.session_state:
+    # 1) Try stateful session token (may break if DB resets on Streamlit Cloud)
     token = cookies.get("session_token")
     if token:
         row = db.get_user_by_session_token(token)
@@ -43,6 +44,24 @@ if "user" not in st.session_state:
                 "years": years,
                 "telegram_chat_id": telegram_chat_id,
             }
+
+    # 2) Fallback: stateless cookie (employee_id) so refresh keeps login even if session table cleared
+    if "user" not in st.session_state:
+        emp = cookies.get("employee_id")
+        if emp:
+            u = db.get_user_by_employee_id(str(emp).strip().lower())
+            if u:
+                user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
+                st.session_state["user"] = {
+                    "user_id": user_id,
+                    "username": username,
+                    "employee_id": emp_id,
+                    "team": team,
+                    "mbti": mbti,
+                    "age": age,
+                    "years": years,
+                    "telegram_chat_id": telegram_chat_id,
+                }
 
 st.set_page_config(page_title="Lunch Buddy 🍱", layout="wide")
 
@@ -62,6 +81,7 @@ def main():
                 if token:
                     db.delete_auth_session(token)
                 cookies["session_token"] = ""
+                cookies["employee_id"] = ""
                 cookies.save()
                 del st.session_state["user"]
                 st.rerun()
@@ -88,6 +108,7 @@ def main():
                         }
                         token = db.create_auth_session(user_id)
                         cookies["session_token"] = token
+                        cookies["employee_id"] = emp_id
                         cookies.save()
                         st.rerun()
                     else:
