@@ -213,9 +213,14 @@ def init_db():
     if "group_host_user_id" not in rcols:
         c.execute("ALTER TABLE requests ADD COLUMN group_host_user_id INTEGER")
 
-    # Prevent duplicate "pending" requests between same pair on same date.
+    # Allow multiple invites per day (for clean re-invites after cancel).
+    # Keep a non-unique index for fast lookup.
+    try:
+        c.execute("DROP INDEX IF EXISTS idx_requests_unique_pair_day")
+    except Exception:
+        pass
     c.execute(
-        """CREATE UNIQUE INDEX IF NOT EXISTS idx_requests_unique_pair_day
+        """CREATE INDEX IF NOT EXISTS idx_requests_pair_day
            ON requests(date, from_user_id, to_user_id)"""
     )
     c.execute(
@@ -1161,42 +1166,25 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     conn = get_connection()
     c = conn.cursor()
     try:
+        # If there is already a pending invite from->to today, don't spam.
+        c.execute(
+            """
+            SELECT 1
+            FROM requests
+            WHERE date=? AND from_user_id=? AND to_user_id=? AND status='pending'
+            LIMIT 1
+            """,
+            (today, from_user_id, to_user_id),
+        )
+        if c.fetchone():
+            return None, "이미 대기중인 요청이 있어요."
+
         c.execute(
             "INSERT INTO requests (from_user_id, to_user_id, group_host_user_id, date, status) VALUES (?, ?, ?, ?, 'pending')",
             (from_user_id, to_user_id, group_host_user_id, today),
         )
         conn.commit()
         req_id = c.lastrowid
-    except sqlite3.IntegrityError:
-        # A request between the same pair already exists today (unique index).
-        # If the previous one was cancelled/declined, allow re-request by reviving it.
-        c.execute(
-            """
-            SELECT id, status
-            FROM requests
-            WHERE date=? AND from_user_id=? AND to_user_id=?
-            LIMIT 1
-            """,
-            (today, from_user_id, to_user_id),
-        )
-        row = c.fetchone()
-        if not row:
-            return None, "이미 오늘 같은 요청을 보냈어요."
-
-        existing_id, existing_status = row
-        if existing_status in ("cancelled", "declined"):
-            c.execute(
-                """
-                UPDATE requests
-                SET status='pending', group_host_user_id=?, timestamp=CURRENT_TIMESTAMP
-                WHERE id=?
-                """,
-                (group_host_user_id, existing_id),
-            )
-            conn.commit()
-            req_id = existing_id
-        else:
-            return None, "이미 오늘 같은 요청을 보냈어요."
     finally:
         conn.close()
 
