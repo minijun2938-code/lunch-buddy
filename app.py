@@ -25,7 +25,7 @@ def main():
             tab_login, tab_signup = st.tabs(["로그인", "회원가입"])
 
             with tab_login:
-                employee_id = st.text_input("사번", key="login_employee_id")
+                employee_id = st.text_input("사번 (예: AB12345)", key="login_employee_id")
                 pin = st.text_input("비밀번호(PIN, 4자리)", type="password", key="login_pin")
 
                 if st.button("로그인", use_container_width=True):
@@ -53,7 +53,7 @@ def main():
                 su_mbti = st.text_input("MBTI", key="su_mbti")
                 su_age = st.number_input("나이", min_value=0, max_value=120, value=30, step=1, key="su_age")
                 su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1, key="su_years")
-                su_emp = st.text_input("사번", key="su_emp")
+                su_emp = st.text_input("사번 (영문2 + 숫자5, 예: AB12345)", key="su_emp")
                 su_pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password", key="su_pin")
                 su_pin2 = st.text_input("비밀번호 확인", type="password", key="su_pin2")
 
@@ -67,7 +67,7 @@ def main():
                             mbti=su_mbti.strip().upper(),
                             age=int(su_age),
                             years=int(su_years),
-                            employee_id=su_emp.strip(),
+                            employee_id=su_emp.strip().upper(),
                             pin=su_pin.strip(),
                         )
                         if ok:

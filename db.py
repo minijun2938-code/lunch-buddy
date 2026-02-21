@@ -19,11 +19,12 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
-    # Users table (supports simple migrations via ALTER TABLE)
+    # Users table (supports simple migrations)
+    # NOTE: username is NOT unique (names can duplicate). employee_id is unique.
     c.execute(
         '''CREATE TABLE IF NOT EXISTS users
                  (user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  username TEXT UNIQUE,
+                  username TEXT,
                   telegram_chat_id TEXT,
                   team TEXT,
                   mbti TEXT,
@@ -49,6 +50,43 @@ def init_db():
     for col, col_type in wanted.items():
         if col not in existing_cols:
             c.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+
+    # If an older DB was created with UNIQUE(username), rebuild users table to drop it.
+    c.execute("PRAGMA index_list(users)")
+    idxs = c.fetchall()  # (seq, name, unique, origin, partial)
+    has_unique_username = False
+    for _seq, name, unique, *_rest in idxs:
+        if not unique:
+            continue
+        c.execute(f"PRAGMA index_info({name})")
+        cols = [r[2] for r in c.fetchall()]  # (seqno, cid, name)
+        if cols == ["username"]:
+            has_unique_username = True
+            break
+
+    if has_unique_username:
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS users_new
+                     (user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      username TEXT,
+                      telegram_chat_id TEXT,
+                      team TEXT,
+                      mbti TEXT,
+                      age INTEGER,
+                      years INTEGER,
+                      employee_id TEXT,
+                      pin_salt TEXT,
+                      pin_hash TEXT)'''
+        )
+        c.execute(
+            """
+            INSERT INTO users_new (user_id, username, telegram_chat_id, team, mbti, age, years, employee_id, pin_salt, pin_hash)
+            SELECT user_id, username, telegram_chat_id, team, mbti, age, years, employee_id, pin_salt, pin_hash
+            FROM users
+            """
+        )
+        c.execute("DROP TABLE users")
+        c.execute("ALTER TABLE users_new RENAME TO users")
 
     # Unique employee id (login id)
     c.execute(
@@ -113,8 +151,16 @@ def register_user(
 
     Returns: (ok, error_message)
     """
+    employee_id = (employee_id or "").strip().upper()
+
+    # employee id rule: 2 letters + 5 digits
+    import re
+
+    if not re.fullmatch(r"[A-Z]{2}\d{5}", employee_id):
+        return False, "사번은 영문자 2개 + 숫자 5개 형식이어야 합니다. (예: AB12345)"
+
     if not (pin.isdigit() and len(pin) == 4):
-        return False, "PIN은 숫자 4자리여야 합니다."
+        return False, "비밀번호(PIN)는 숫자 4자리여야 합니다."
 
     salt = secrets.token_hex(16)
     pin_hash = _hash_pin(employee_id, pin, salt)
@@ -132,13 +178,14 @@ def register_user(
         conn.commit()
         return True, None
     except sqlite3.IntegrityError:
-        return False, "이미 존재하는 사번(employee_id) 또는 이름(username)입니다."
+        return False, "이미 존재하는 사번(employee_id)입니다."
     finally:
         conn.close()
 
 
 def verify_login(employee_id: str, pin: str) -> tuple[bool, tuple | None]:
     """Returns (ok, user_row)."""
+    employee_id = (employee_id or "").strip().upper()
     user = get_user_by_employee_id(employee_id)
     if not user:
         return False, None
