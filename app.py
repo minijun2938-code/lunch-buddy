@@ -201,25 +201,43 @@ def main():
         if st.button(
             "🧑‍🍳 오늘 점심 같이 드실분?",
             use_container_width=True,
-            disabled=(db.get_status_today(user_id) == "Booked"),
+            disabled=False,
         ):
-            if db.get_groups_for_user_today(user_id):
+            # Allow hosting even if Booked (e.g., 1:1 already fixed but want to recruit more)
+            if db.get_groups_for_user_today(user_id) and my_status != "Hosting":
                 st.warning("이미 점심약속이 있는것 같아요!")
             else:
-                db.update_status(user_id, "Hosting")
+                # Best-effort: if already Booked, keep status Booked and just show hosting form by setting Hosting anyway.
+                if my_status != "Booked":
+                    db.update_status(user_id, "Hosting")
+                st.session_state["hosting_open"] = True
                 st.rerun()
 
     # Hosting inputs
-    if db.get_status_today(user_id) == "Hosting":
+    hosting_open = st.session_state.get("hosting_open") or (db.get_status_today(user_id) == "Hosting")
+    if hosting_open:
         st.markdown("### 🧑‍🍳 합류 모집 정보")
+
+        # Autofill current members: me + (if 1:1 booked) partner(s)
+        partners = db.get_accepted_partners_today(user_id)
+        default_members = ", ".join([current_user] + [name for _uid, name in partners])
+
         with st.form("hosting_form"):
-            member_names = st.text_input("현재 멤버(이름)", value=current_user)
+            member_names = st.text_input("현재 멤버(이름)", value=default_members)
             seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1)
             menu = st.text_input("메뉴")
             submitted = st.form_submit_button("저장")
 
         if submitted:
             db.upsert_group(user_id, member_names.strip(), int(seats_left), menu.strip())
+            # Ensure partner user_ids are in normalized group_members without consuming seats
+            for pid, _pname in partners:
+                db.ensure_member_in_group(user_id, int(pid), today_str)
+            # Rebuild display fields
+            try:
+                db._rebuild_group_legacy_fields(user_id, today_str)
+            except Exception:
+                pass
             st.success("저장 완료!")
 
     st.markdown("---")

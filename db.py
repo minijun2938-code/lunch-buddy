@@ -331,12 +331,14 @@ def get_user_by_id(user_id):
 def update_status(user_id, status):
     """Set today's status.
 
-    Rule: Booked is terminal for the day (cannot be downgraded to Planning/Free/Hosting).
+    Rule: Booked is terminal for the day (cannot be downgraded),
+    but we still allow creating a hosting group while Booked.
     """
     today = datetime.date.today().isoformat()
 
     current = get_status_today(user_id)
-    if current == "Booked" and status != "Booked":
+    if current == "Booked" and status not in ("Booked",):
+        # Do not downgrade Booked.
         return
 
     conn = get_connection()
@@ -351,8 +353,9 @@ def update_status(user_id, status):
     if status == "Booked":
         cancel_pending_requests_for_user(user_id)
 
-    # If user is no longer hosting, remove their group listing for today.
-    if status != "Hosting":
+    # If user explicitly sets to Free/Planning/Not Set, remove their hosting listing.
+    # But do NOT delete hosting just because they became Booked.
+    if status in ("Free", "Planning", "Not Set"):
         delete_group(user_id)
 
 
@@ -401,7 +404,11 @@ def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: st
 
 
 def get_groups_today():
-    """Return only groups whose host's current status is Hosting."""
+    """Return today's hosting groups.
+
+    Hosts may be Booked (e.g., 1:1 already fixed but still recruiting more).
+    We treat the existence of a lunch_groups row as 'hosting'.
+    """
     today = datetime.date.today().isoformat()
     conn = get_connection()
     c = conn.cursor()
@@ -410,8 +417,7 @@ def get_groups_today():
         SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
         FROM lunch_groups g
         JOIN users u ON u.user_id = g.host_user_id
-        JOIN daily_status ds ON ds.user_id = g.host_user_id AND ds.date = g.date
-        WHERE g.date=? AND ds.status='Hosting'
+        WHERE g.date=?
         ORDER BY g.id DESC
         """,
         (today,),
@@ -419,6 +425,17 @@ def get_groups_today():
     rows = c.fetchall()
     conn.close()
     return rows
+
+
+def ensure_member_in_group(host_user_id: int, user_id: int, date_str: str):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+        (date_str, host_user_id, user_id),
+    )
+    conn.commit()
+    conn.close()
 
 
 def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
@@ -623,6 +640,27 @@ def cancel_accepted_for_users(user_ids: list[int]):
     conn.close()
 
 
+def get_accepted_partners_today(user_id: int):
+    """For 1:1 accepted lunches (no group), return the other user(s)."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT CASE WHEN r.from_user_id=? THEN r.to_user_id ELSE r.from_user_id END AS other_id,
+               u.username
+        FROM requests r
+        JOIN users u ON u.user_id = (CASE WHEN r.from_user_id=? THEN r.to_user_id ELSE r.from_user_id END)
+        WHERE r.date=? AND r.status='accepted' AND r.group_host_user_id IS NULL
+          AND (r.from_user_id=? OR r.to_user_id=?)
+        """,
+        (user_id, user_id, today, user_id, user_id),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
 def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     """Cancel a booked lunch.
 
@@ -786,7 +824,12 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
 
     Returns: (request_id, error_message)
     """
-    if get_status_today(from_user_id) == "Booked" or get_status_today(to_user_id) == "Booked":
+    # one-lunch rule
+    if get_status_today(from_user_id) == "Booked":
+        return None, "이미 점심약속이 있는것 같아요!"
+
+    # Allow inviting a Booked host ONLY when it's a join request to that host's group.
+    if get_status_today(to_user_id) == "Booked" and not (group_host_user_id and int(group_host_user_id) == int(to_user_id)):
         return None, "이미 점심약속이 있는것 같아요!"
 
     today = datetime.date.today().isoformat()
