@@ -17,6 +17,11 @@ def kst_today_iso() -> str:
     return kst_today().isoformat()
 
 
+def kst_now_str() -> str:
+    """KST timestamp string for display/storage."""
+    return (datetime.datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -551,6 +556,17 @@ def get_group_by_host_on_date(host_user_id: int, date_str: str):
     return row
 
 
+def update_group_menu_payer(host_user_id: int, date_str: str, menu: str | None, payer_name: str | None):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE lunch_groups SET menu=?, payer_name=? WHERE date=? AND host_user_id=?",
+        (menu or "", payer_name or "", date_str, host_user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_group_by_host_today(host_user_id: int):
     return get_group_by_host_on_date(host_user_id, datetime.date.today().isoformat())
 
@@ -1008,8 +1024,8 @@ def add_group_chat(host_user_id: int, user_id: int, username: str, message: str,
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO group_chat(date, host_user_id, user_id, username, message) VALUES (?,?,?,?,?)",
-        (date_str, host_user_id, user_id, username, message),
+        "INSERT INTO group_chat(date, host_user_id, user_id, username, message, timestamp) VALUES (?,?,?,?,?,?)",
+        (date_str, host_user_id, user_id, username, message, kst_now_str()),
     )
     conn.commit()
     conn.close()

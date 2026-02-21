@@ -133,8 +133,7 @@ def main():
                 su_name = st.text_input("이름", key="su_name")
                 su_team = st.text_input("팀명", key="su_team")
                 su_role = st.selectbox("직급", ["팀원", "팀장", "임원"], index=0, key="su_role")
-                su_mbti = st.text_input("MBTI", key="su_mbti")
-                su_age = st.number_input("나이", min_value=0, max_value=120, value=30, step=1, key="su_age")
+                # MBTI/나이는 입력받지 않음 (단순화)
                 su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1, key="su_years")
                 su_emp = st.text_input("사번 (예: sl55555)", key="su_emp")
                 su_pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password", key="su_pin")
@@ -148,8 +147,8 @@ def main():
                             username=su_name.strip(),
                             team=su_team.strip(),
                             role=su_role,
-                            mbti=su_mbti.strip().upper(),
-                            age=int(su_age),
+                            mbti="",
+                            age=0,
                             years=int(su_years),
                             employee_id=su_emp.strip().lower(),
                             pin=su_pin.strip(),
@@ -234,6 +233,16 @@ def main():
             st.markdown("**오늘 점약 상세**" if my_status == "Booked" else "**오늘 같이 먹는 멤버**")
             members = db.list_group_members(host_uid, today_str)
             st.write(", ".join([name for _uid, name in members]) if members else (member_names or "-"))
+            # Menu editable box
+            with st.expander("🍽️ 메뉴/쏘는사람 수정", expanded=False):
+                new_menu = st.text_input("메뉴", value=(menu or ""), key=f"menu_edit_{host_uid}")
+                new_payer = st.text_input("(선택) 내가쏜다!", value=(payer_name or ""), key=f"payer_edit_{host_uid}")
+                new_payer = (new_payer or "").strip()
+                if st.button("저장", key=f"save_menu_{host_uid}"):
+                    db.update_group_menu_payer(host_uid, today_str, new_menu.strip(), new_payer or None)
+                    st.success("저장 완료")
+                    st.rerun()
+
             st.markdown(f"**메뉴:** {menu or '-'}")
             if payer_name:
                 st.markdown(f"**내가쏜다:** {payer_name} 💳")
@@ -241,6 +250,11 @@ def main():
 
             # --- Members-only chat ---
             with st.expander("💬 멤버 채팅 (메뉴/시간 정하기)", expanded=True):
+                realtime = st.toggle("실시간 업데이트(3초)", value=True, key=f"rt_{host_uid}")
+                if realtime:
+                    # simple page refresh polling
+                    st.components.v1.html("<meta http-equiv='refresh' content='3'>", height=0)
+
                 chat_rows = db.list_group_chat(host_uid, today_str, limit=200)
                 if not chat_rows:
                     st.caption("아직 대화가 없어요.")
