@@ -490,12 +490,20 @@ def main():
     if not outgoing:
         st.caption("아직 보낸 초대가 없어요.")
     else:
+        # show latest per recipient (prevents cancelled history from hiding current pending UX)
+        seen = set()
         for req_id, to_uid, to_name, status, ts, _group_host_user_id in outgoing:
+            if to_uid in seen:
+                continue
+            seen.add(to_uid)
+
             with st.container(border=True):
                 st.write(f"나 → **{to_name}**")
                 st.caption(f"상태: {pretty_status(status)} · {ts}")
+
+                # 철회 버튼은 'pending'일 때 항상 노출
                 if status == "pending":
-                    if st.button("취소", key=f"cancel_{req_id}"):
+                    if st.button("초대 철회", key=f"cancel_{req_id}"):
                         db.cancel_request(req_id)
                         # if no more pending outgoing, unlock status back to (미정)
                         if (db.get_status_today(user_id) == "Planning") and (not db.has_pending_outgoing_today(user_id)):
