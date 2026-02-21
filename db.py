@@ -104,6 +104,22 @@ def init_db():
                   UNIQUE(date, user_id))'''
     )
 
+    # Hosting groups ("우리쪽에 합류하실분?")
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS lunch_groups
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  date TEXT,
+                  host_user_id INTEGER,
+                  member_names TEXT,
+                  seats_left INTEGER,
+                  menu TEXT,
+                  UNIQUE(date, host_user_id))'''
+    )
+    c.execute(
+        """CREATE INDEX IF NOT EXISTS idx_groups_day
+           ON lunch_groups(date)"""
+    )
+
     # Requests table
     # status: pending | accepted | declined | cancelled
     c.execute(
@@ -246,11 +262,46 @@ def update_status(user_id, status):
     today = datetime.date.today().isoformat()
     conn = get_connection()
     c = conn.cursor()
-    # Insert or Replace (Upsert logic for SQLite)
-    c.execute("INSERT OR REPLACE INTO daily_status (id, date, user_id, status) VALUES ((SELECT id FROM daily_status WHERE date=? AND user_id=?), ?, ?, ?)", 
-              (today, user_id, today, user_id, status))
+    c.execute(
+        "INSERT OR REPLACE INTO daily_status (id, date, user_id, status) VALUES ((SELECT id FROM daily_status WHERE date=? AND user_id=?), ?, ?, ?)",
+        (today, user_id, today, user_id, status),
+    )
     conn.commit()
     conn.close()
+
+
+def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: str):
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        INSERT OR REPLACE INTO lunch_groups (id, date, host_user_id, member_names, seats_left, menu)
+        VALUES ((SELECT id FROM lunch_groups WHERE date=? AND host_user_id=?), ?, ?, ?, ?, ?)
+        """,
+        (today, host_user_id, today, host_user_id, member_names, int(seats_left), menu),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_groups_today():
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
+        FROM lunch_groups g
+        JOIN users u ON u.user_id = g.host_user_id
+        WHERE g.date=?
+        ORDER BY g.id DESC
+        """,
+        (today,),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
 
 def get_all_statuses():
     today = datetime.date.today().isoformat()

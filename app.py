@@ -95,10 +95,26 @@ def main():
             st.rerun()
 
     with col2:
-        if st.button("🟠 점약을 잡는 중이에요", use_container_width=True):
-            db.update_status(user_id, "Planning")
-            st.toast("상태 변경 완료: 점약 잡는 중 🟠")
+        if st.button("🧑‍🍳 우리쪽에 합류하실분?", use_container_width=True):
+            db.update_status(user_id, "Hosting")
+            st.toast("상태 변경 완료: 합류 모집 중 🧑‍🍳")
             st.rerun()
+
+    # If hosting, show extra inputs
+    my_status_row = [s for s in db.get_all_statuses() if s[0] == user_id]
+    my_status = my_status_row[0][2] if my_status_row else "Not Set"
+
+    if my_status == "Hosting":
+        st.markdown("### 🧑‍🍳 합류 모집 정보")
+        with st.form("hosting_form"):
+            member_names = st.text_input("현재 멤버(이름)", value=current_user)
+            seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1)
+            menu = st.text_input("메뉴", placeholder="예: 김치찌개 / 샐러드 / 파스타")
+            submitted = st.form_submit_button("저장")
+
+        if submitted:
+            db.upsert_group(user_id, member_names.strip(), int(seats_left), menu.strip())
+            st.success("저장 완료! 이제 다른 사람이 '우리쪽에 합류하실분?'에서 확인할 수 있어요.")
 
     st.markdown("---")
 
@@ -163,7 +179,9 @@ def main():
     if myself:
         my_status = myself[0][2]
         if my_status == "Free":
-            st.info("현재 내 상태: **점약 없음(불러주세요)** 🟢")
+            st.info("현재 내 상태: **점약 없어요(불러주세요)** 🟢")
+        elif my_status == "Hosting":
+            st.info("현재 내 상태: **우리쪽 합류 모집 중** 🧑‍🍳")
         elif my_status == "Planning":
             st.info("현재 내 상태: **점약 잡는 중** 🟠")
         elif my_status == "Not Set":
@@ -171,54 +189,64 @@ def main():
         else:
             st.info(f"현재 내 상태: **{my_status}**")
 
-    if not others:
-        st.write("아직 등록된 다른 동료가 없어요.")
+    # Section A: Groups to join
+    st.markdown("### 🧑‍🍳 우리쪽에 합류하실분?")
+    groups = db.get_groups_today()
+    joinable = [g for g in groups if g[4] is None or int(g[4]) > 0]
+    if not joinable:
+        st.caption("아직 모집 중인 팀이 없어요.")
     else:
-        # Always show only people who said "call me" (Free)
-        others = [o for o in others if o[2] == "Free"]
+        for gid, host_uid, host_name, member_names, seats_left, menu in joinable:
+            with st.container(border=True):
+                st.write(f"**호스트:** {host_name}")
+                st.write(f"**현재 멤버:** {member_names or '-'}")
+                st.write(f"**남은 자리:** {seats_left}")
+                st.write(f"**메뉴:** {menu or '-'}")
 
+    st.markdown("---")
+
+    # Section B: Free people
+    st.markdown("### 🟢 점약 없어요 불러주세요")
+    free_people = [o for o in others if o[2] == "Free"]
+
+    if not free_people and not joinable:
+        st.write("아직 등록된 다른 동료가 없어요.")
+    elif not free_people:
+        st.caption("지금 '불러주세요' 상태인 사람이 없어요.")
+    else:
         cols = st.columns(4)
-        for i, (uid, uname, status, t_chat_id) in enumerate(others):
+        for i, (uid, uname, status, t_chat_id) in enumerate(free_people):
             with cols[i % 4]:
                 with st.container(border=True):
                     st.markdown(f"### {uname}")
+                    st.write("상태: 🟢 점약 없음 (불러주세요)")
 
-                    status_display = "⚪ 미설정"
-                    if status == "Free":
-                        status_display = "🟢 점약 없음 (불러주세요)"
-                    elif status == "Planning":
-                        status_display = "🟠 점약 잡는 중"
+                    existing_req = db.get_pending_request_between(user_id, uid)
+                    disabled = bool(existing_req and existing_req[1] == "pending")
 
-                    st.write(f"상태: {status_display}")
-
-                    # Invite action
-                    if status == "Free":
-                        existing_req = db.get_pending_request_between(user_id, uid)
-                        disabled = bool(existing_req and existing_req[1] == "pending")
-
-                        if st.button(
-                            "🍚 밥 먹자고 찌르기!",
-                            key=f"req_{uid}",
-                            disabled=disabled,
-                            use_container_width=True,
-                        ):
-                            req_id = db.create_request(user_id, uid)
-                            if not req_id:
-                                st.warning("이미 오늘 같은 요청을 보냈어요.")
+                    if st.button(
+                        "🍚 밥 먹자고 찌르기!",
+                        key=f"req_{uid}",
+                        disabled=disabled,
+                        use_container_width=True,
+                    ):
+                        req_id = db.create_request(user_id, uid)
+                        if not req_id:
+                            st.warning("이미 오늘 같은 요청을 보냈어요.")
+                        else:
+                            msg = (
+                                f"🍚 [Lunch Buddy] **{current_user}**님이 점심 같이 먹자고 요청했어요!\n\n"
+                                "(앱에서 수락/거절할 수 있어요)"
+                            )
+                            success = bot.send_telegram_msg(t_chat_id, msg)
+                            if success:
+                                st.success(f"{uname}님에게 알림을 보냈어요! 📲")
                             else:
-                                msg = (
-                                    f"🍚 [Lunch Buddy] **{current_user}**님이 점심 같이 먹자고 요청했어요!\n\n"
-                                    "(앱에서 수락/거절할 수 있어요)"
-                                )
-                                success = bot.send_telegram_msg(t_chat_id, msg)
-                                if success:
-                                    st.success(f"{uname}님에게 알림을 보냈어요! 📲")
-                                else:
-                                    st.info("요청은 저장했고, 양쪽 상태는 '점약 잡는 중'으로 바뀌었어요. (텔레그램은 미연결)")
-                                st.rerun()
+                                st.info("요청은 저장했고, 양쪽 상태는 '점약 잡는 중'으로 바뀌었어요. (텔레그램은 미연결)")
+                            st.rerun()
 
-                        if disabled:
-                            st.caption("이미 오늘 초대를 보냈어요(대기중).")
+                    if disabled:
+                        st.caption("이미 오늘 초대를 보냈어요(대기중).")
 
 if __name__ == "__main__":
     main()
