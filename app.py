@@ -257,27 +257,11 @@ def main():
             seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1)
             menu = st.text_input("메뉴")
 
-            st.caption("내가쏜다(선택입력): 쏘는 사람이 있으면 아래에서 선택")
-            i_pay = st.checkbox("내가쏜다 (선택입력)")
-
-            # dropdown from member_names (best-effort)
-            raw_names = [n.strip() for n in (member_names or "").split(",") if n.strip()]
-            # Always include me as a selectable payer (even when hosting solo)
-            raw_names = [current_user] + raw_names
-
-            # de-dup while preserving order
-            seen = set()
-            member_list = []
-            for n in raw_names:
-                if n not in seen:
-                    member_list.append(n)
-                    seen.add(n)
-            if not member_list:
-                member_list = [current_user]
-
-            payer_name = None
-            if i_pay:
-                payer_name = st.text_input("누가 쏘나요? (이름 입력)", value=current_user)
+            st.caption("(선택) 내가쏜다!")
+            payer_name = st.text_input("누가 쏘나요? (이름 입력)", value="")
+            payer_name = (payer_name or "").strip()
+            if not payer_name:
+                payer_name = None
 
             submitted = st.form_submit_button("저장")
 
