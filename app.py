@@ -407,18 +407,23 @@ def main():
 
     host_group = db.get_group_by_host_today(user_id)
 
-    free_people = [o for o in others if o[2] == "Free"]
+    # include me too, so I can confirm my status is visible
+    free_people = [s for s in all_statuses if s[2] == "Free"]
     if not free_people:
         st.caption("지금 '불러주세요' 상태인 사람이 없어요.")
     else:
         cols = st.columns(4)
         for i, (uid, uname, _status, _chat) in enumerate(free_people):
+            is_me = (uid == user_id)
             with cols[i % 4]:
                 with st.container(border=True):
-                    st.markdown(f"### {uname}")
+                    st.markdown(f"### {uname}" + (" (나)" if is_me else ""))
+
+                    if is_me:
+                        st.caption("✅ 내가 '불러주세요'로 잘 표시되는지 확인용")
 
                     # 1) If I'm hosting an existing group, invite them to my group
-                    if host_group:
+                    if host_group and not is_me:
                         _gid, _d, _host_uid, _host_name, member_names, seats_left, menu, payer_name = host_group
                         invite_label = "🍽️ 우리랑 같이 먹을래요?"
                         invite_disabled = (db.get_status_today(uid) == "Booked") or (int(seats_left or 0) <= 0)
@@ -432,13 +437,14 @@ def main():
                         st.caption(f"(내 모임) 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}{extra}")
 
                     # 2) Regular 1:1 invite
-                    if st.button("🍚 밥 먹자고 찌르기!", key=f"req_{uid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
-                        req_id, err = db.create_request(user_id, uid)
-                        if not req_id:
-                            st.warning(err or "요청 실패")
-                        else:
-                            st.success("요청 보냈어요!")
-                        st.rerun()
+                    if not is_me:
+                        if st.button("🍚 밥 먹자고 찌르기!", key=f"req_{uid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
+                            req_id, err = db.create_request(user_id, uid)
+                            if not req_id:
+                                st.warning(err or "요청 실패")
+                            else:
+                                st.success("요청 보냈어요!")
+                            st.rerun()
 
     st.markdown("---")
 
