@@ -193,15 +193,29 @@ def main():
             st.markdown(f"**내가쏜다:** {payer_name} 💳")
         st.caption(f"호스트: {host_name}")
     else:
-        # 1:1 booked detail (no group)
+        # 1:1 booked detail (no group) → auto-create a 1:1 group so details can be stored/shown
         if my_status == "Booked":
             d = db.get_latest_accepted_1to1_detail_today(user_id)
             if d:
                 _req_id, other_id, other_name, ts = d
-                st.markdown("**오늘 점약(1:1) 상세**")
-                st.write(f"함께: {current_user} + {other_name}")
-                st.write("메뉴: -")
-                st.caption(f"시간: {ts}")
+                db.ensure_1to1_group_today(user_id, int(other_id))
+
+                # re-fetch as group
+                my_groups_today = db.get_groups_for_user_today(user_id)
+                if my_groups_today:
+                    gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
+                    st.markdown("**오늘 점약 상세**")
+                    members = db.list_group_members(host_uid, today_str)
+                    st.write("함께: " + (", ".join([name for _uid, name in members]) if members else (member_names or "-")))
+                    st.markdown(f"**메뉴:** {menu or '-'}")
+                    if payer_name:
+                        st.markdown(f"**내가쏜다:** {payer_name} 💳")
+                    st.caption(f"시간: {ts}")
+                else:
+                    st.markdown("**오늘 점약(1:1) 상세**")
+                    st.write(f"함께: {current_user} + {other_name}")
+                    st.write("메뉴: -")
+                    st.caption(f"시간: {ts}")
 
     # --- Status buttons ---
     st.subheader("👋 오늘 상태는?")
@@ -336,6 +350,8 @@ def main():
                             else:
                                 db.update_status(user_id, "Booked")
                                 db.update_status(from_uid, "Booked")
+                                # create implicit 1:1 group for details/menu/payer
+                                db.ensure_1to1_group_today(user_id, from_uid)
 
                             sender = db.get_user_by_id(from_uid)
                             if sender and sender[2]:

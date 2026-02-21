@@ -710,6 +710,55 @@ def get_accepted_partners_today(user_id: int):
     return rows
 
 
+def ensure_1to1_group_today(user_a: int, user_b: int):
+    """Ensure a lunch_groups record exists for a matched 1:1 so we can store/show menu/payer.
+
+    Host is deterministic (min user_id) to avoid duplicates.
+    seats_left=0 by default.
+    """
+    today = datetime.date.today().isoformat()
+    host_uid = int(min(user_a, user_b))
+    other_uid = int(max(user_a, user_b))
+
+    ua = get_user_by_id(int(user_a))
+    ub = get_user_by_id(int(user_b))
+    if not ua or not ub:
+        return
+
+    a_name = ua[1]
+    b_name = ub[1]
+
+    # create/update group
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            INSERT OR IGNORE INTO lunch_groups(date, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+            (today, host_uid, f"{a_name}, {b_name}", f"{host_uid},{other_uid}", 0, "", ""),
+        )
+        # ensure both members
+        c.execute(
+            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+            (today, host_uid, host_uid),
+        )
+        c.execute(
+            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+            (today, host_uid, other_uid),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # keep legacy fields aligned
+    try:
+        _rebuild_group_legacy_fields(host_uid, today)
+    except Exception:
+        pass
+
+
 def get_latest_accepted_1to1_detail_today(user_id: int):
     """Return (req_id, other_user_id, other_name, timestamp) for latest accepted 1:1 request."""
     today = datetime.date.today().isoformat()
