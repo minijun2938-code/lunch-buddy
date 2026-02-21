@@ -170,6 +170,9 @@ def main():
         st.info("왼쪽에서 로그인해줘.")
         st.stop()
 
+    # global auto refresh (invites + colleagues)
+    st_autorefresh(interval=3000, key="global_refresh")
+
     user_id = st.session_state["user"]["user_id"]
     current_user = st.session_state["user"]["username"]
 
