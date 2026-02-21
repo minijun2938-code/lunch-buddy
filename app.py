@@ -75,6 +75,9 @@ def main():
     user_id = st.session_state["user"]["user_id"]
     current_user = st.session_state["user"]["username"]
 
+    # Priority rule: if any accepted invite exists today, treat as Booked (overrides Planning)
+    db.reconcile_user_today(user_id)
+
     # --- Status Setting (one lunch per day rule) ---
     st.subheader(f"👋 {current_user}님의 오늘 상태")
 

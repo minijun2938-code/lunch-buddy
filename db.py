@@ -286,7 +286,32 @@ def update_user_chat_id(user_id, chat_id):
 
 
 def set_planning(user_id: int):
+    # Planning should not override Booked
     update_status(user_id, "Planning")
+
+
+def has_accepted_today(user_id: int) -> bool:
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT 1
+        FROM requests
+        WHERE date=? AND status='accepted' AND (from_user_id=? OR to_user_id=?)
+        LIMIT 1
+        """,
+        (today, user_id, user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    return bool(row)
+
+
+def reconcile_user_today(user_id: int):
+    """Make Booked highest priority if any accepted invite exists today."""
+    if has_accepted_today(user_id):
+        update_status(user_id, "Booked")
 
 def get_user_by_employee_id(employee_id: str):
     conn = get_connection()
@@ -320,7 +345,16 @@ def get_user_by_id(user_id):
     return user
 
 def update_status(user_id, status):
+    """Set today's status.
+
+    Rule: Booked is terminal for the day (cannot be downgraded to Planning/Free/Hosting).
+    """
     today = datetime.date.today().isoformat()
+
+    current = get_status_today(user_id)
+    if current == "Booked" and status != "Booked":
+        return
+
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -329,6 +363,9 @@ def update_status(user_id, status):
     )
     conn.commit()
     conn.close()
+
+    if status == "Booked":
+        cancel_pending_requests_for_user(user_id)
 
     # If user is no longer hosting, remove their group listing for today.
     if status != "Hosting":
