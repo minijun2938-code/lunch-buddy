@@ -565,6 +565,137 @@ def list_group_members(host_user_id: int, date_str: str):
     return rows
 
 
+def _rebuild_group_legacy_fields(host_user_id: int, date_str: str):
+    """Keep lunch_groups.member_names/member_user_ids in sync from normalized members."""
+    members = list_group_members(host_user_id, date_str)
+    member_names = ", ".join([name for _uid, name in members])
+    member_user_ids = ",".join([str(uid) for uid, _name in members])
+
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE lunch_groups SET member_names=?, member_user_ids=? WHERE date=? AND host_user_id=?",
+        (member_names, member_user_ids, date_str, host_user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def remove_member_from_group(host_user_id: int, user_id: int, date_str: str) -> tuple[bool, str | None]:
+    """Remove a member from a host group and increment seats_left."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "DELETE FROM group_members WHERE date=? AND host_user_id=? AND user_id=?",
+        (date_str, host_user_id, user_id),
+    )
+    removed = c.rowcount > 0
+    if not removed:
+        conn.close()
+        return False, "멤버가 그룹에 없어요."
+
+    c.execute(
+        "UPDATE lunch_groups SET seats_left = seats_left + 1 WHERE date=? AND host_user_id=?",
+        (date_str, host_user_id),
+    )
+    conn.commit()
+    conn.close()
+
+    _rebuild_group_legacy_fields(host_user_id, date_str)
+    return True, None
+
+
+def cancel_accepted_for_users(user_ids: list[int]):
+    """Cancel today's accepted requests for the given users."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    for uid in user_ids:
+        c.execute(
+            """
+            UPDATE requests
+            SET status='cancelled'
+            WHERE date=? AND status='accepted' AND (from_user_id=? OR to_user_id=?)
+            """,
+            (today, uid, uid),
+        )
+    conn.commit()
+    conn.close()
+
+
+def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
+    """Cancel a booked lunch.
+
+    - If 1:1 booking: cancel both sides (set statuses Free).
+    - If group booking (>2): remove only this user from the group (set status Free).
+    """
+    today = datetime.date.today().isoformat()
+
+    # If user is in a group, use that as source of truth.
+    groups = get_groups_for_user_on_date(user_id, today)
+    if groups:
+        _gid, _date, host_uid, _host_name, _member_names, _seats_left, _menu = groups[0]
+        members = list_group_members(host_uid, today)
+        member_ids = [uid for uid, _n in members]
+
+        if len(member_ids) <= 2:
+            # cancel entire booking
+            for uid in member_ids:
+                update_status(uid, "Free")
+            cancel_accepted_for_users(member_ids)
+
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("DELETE FROM group_members WHERE date=? AND host_user_id=?", (today, host_uid))
+            c.execute("DELETE FROM lunch_groups WHERE date=? AND host_user_id=?", (today, host_uid))
+            conn.commit()
+            conn.close()
+            return True, None
+
+        # group > 2: remove only this user
+        ok, err = remove_member_from_group(host_uid, user_id, today)
+        if not ok:
+            return False, err
+
+        update_status(user_id, "Free")
+        cancel_accepted_for_users([user_id])
+        return True, None
+
+    # No group: handle 1:1 accepted request
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT id, from_user_id, to_user_id
+        FROM requests
+        WHERE date=? AND status='accepted' AND group_host_user_id IS NULL
+          AND (from_user_id=? OR to_user_id=?)
+        ORDER BY timestamp DESC
+        LIMIT 1
+        """,
+        (today, user_id, user_id),
+    )
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        # fallback: just free me
+        update_status(user_id, "Free")
+        return True, None
+
+    req_id, from_uid, to_uid = row
+    other = to_uid if from_uid == user_id else from_uid
+
+    c.execute("UPDATE requests SET status='cancelled' WHERE id=?", (req_id,))
+    conn.commit()
+    conn.close()
+
+    update_status(user_id, "Free")
+    update_status(other, "Free")
+    cancel_pending_requests_for_user(user_id)
+    cancel_pending_requests_for_user(other)
+    return True, None
+
+
 def list_my_group_dates(user_id: int, limit: int = 30):
     conn = get_connection()
     c = conn.cursor()

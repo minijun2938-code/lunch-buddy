@@ -154,6 +154,13 @@ def main():
 
     if my_status == "Booked":
         st.markdown("## 점약 있어요 🎉")
+        if st.button("🚫 점약 취소하기", type="primary"):
+            ok, err = db.cancel_booking_for_user(user_id)
+            if ok:
+                st.success("취소 완료")
+                st.rerun()
+            else:
+                st.error(err or "취소 실패")
     else:
         status_text = {
             "Free": "점약 없어요(불러주세요) 🟢",
@@ -163,10 +170,9 @@ def main():
         }.get(my_status, my_status)
         st.info(f"현재 내 상태: **{status_text}**")
 
-    # If I'm booked, show who/what
+    # Show who/what if I'm in a group today (even if not Booked yet)
     my_groups_today = db.get_groups_for_user_today(user_id)
     if my_groups_today:
-        # show latest group
         gid, gdate, host_uid, host_name, member_names, seats_left, menu = my_groups_today[0]
         st.markdown("**오늘 같이 먹는 멤버**")
         members = db.list_group_members(host_uid, today_str)
