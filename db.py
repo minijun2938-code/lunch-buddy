@@ -331,6 +331,16 @@ def get_user_by_id(user_id):
     conn.close()
     return user
 
+def clear_status_today(user_id: int):
+    """Remove today's status row so UI shows 'Not Set'."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM daily_status WHERE date=? AND user_id=?", (today, user_id))
+    conn.commit()
+    conn.close()
+
+
 def update_status(user_id, status, *, force: bool = False):
     """Set today's status.
 
@@ -732,7 +742,7 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
             # cancel entire booking
             cancel_accepted_for_users(member_ids)
             for uid in member_ids:
-                update_status(uid, "Free", force=True)
+                clear_status_today(uid)
 
             conn = get_connection()
             c = conn.cursor()
@@ -748,7 +758,7 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
             return False, err
 
         cancel_accepted_for_users([user_id])
-        update_status(user_id, "Free", force=True)
+        clear_status_today(user_id)
         return True, None
 
     # No group: handle 1:1 accepted request
@@ -768,8 +778,8 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     row = c.fetchone()
     if not row:
         conn.close()
-        # fallback: just free me
-        update_status(user_id, "Free", force=True)
+        # fallback: just clear me
+        clear_status_today(user_id)
         return True, None
 
     req_id, from_uid, to_uid = row
@@ -779,8 +789,8 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     conn.commit()
     conn.close()
 
-    update_status(user_id, "Free", force=True)
-    update_status(other, "Free", force=True)
+    clear_status_today(user_id)
+    clear_status_today(other)
     cancel_pending_requests_for_user(user_id)
     cancel_pending_requests_for_user(other)
     return True, None
