@@ -178,11 +178,13 @@ def main():
     # Show who/what if I'm in a group today (even if not Booked yet)
     my_groups_today = db.get_groups_for_user_today(user_id)
     if my_groups_today:
-        gid, gdate, host_uid, host_name, member_names, seats_left, menu = my_groups_today[0]
+        gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
         st.markdown("**오늘 같이 먹는 멤버**")
         members = db.list_group_members(host_uid, today_str)
         st.write(", ".join([name for _uid, name in members]) if members else (member_names or "-"))
         st.markdown(f"**메뉴:** {menu or '-'}")
+        if payer_name:
+            st.markdown(f"**내가쏜다:** {payer_name} 💳")
         st.caption(f"호스트: {host_name}")
     else:
         # 1:1 booked detail (no group)
@@ -253,10 +255,30 @@ def main():
             member_names = st.text_input("현재 멤버(이름)", value=default_members)
             seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1)
             menu = st.text_input("메뉴")
+
+            st.caption("내가 쏜다(선택): 쏘는 사람이 있으면 아래에서 선택")
+            i_pay = st.checkbox("내가쏜다 (선택)")
+
+            # dropdown from member_names (best-effort)
+            raw_names = [n.strip() for n in (member_names or "").split(",") if n.strip()]
+            # de-dup while preserving order
+            seen = set()
+            member_list = []
+            for n in raw_names:
+                if n not in seen:
+                    member_list.append(n)
+                    seen.add(n)
+            if not member_list:
+                member_list = [current_user]
+
+            payer_name = None
+            if i_pay:
+                payer_name = st.selectbox("누가 쏘나요?", member_list, index=0)
+
             submitted = st.form_submit_button("저장")
 
         if submitted:
-            db.upsert_group(user_id, member_names.strip(), int(seats_left), menu.strip())
+            db.upsert_group(user_id, member_names.strip(), int(seats_left), menu.strip(), payer_name=payer_name)
             # Ensure partner user_ids are in normalized group_members without consuming seats
             for pid, _pname in partners:
                 db.ensure_member_in_group(user_id, int(pid), today_str)
@@ -298,8 +320,9 @@ def main():
                     g = db.get_group_by_host_today(int(group_host_user_id))
                     st.write(f"**{from_name}** → 나 (그룹 합류 초대)")
                     if g:
-                        _gid, _d, _host_uid, host_name, member_names, seats_left, menu = g
-                        st.caption(f"초대 팀: {host_name} | 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}")
+                        _gid, _d, _host_uid, host_name, member_names, seats_left, menu, payer_name = g
+                        extra = f" | 내가쏜다: {payer_name} 💳" if payer_name else ""
+                        st.caption(f"초대 팀: {host_name} | 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}{extra}")
                 else:
                     st.write(f"**{from_name}** → 나")
 
@@ -359,12 +382,14 @@ def main():
     if not joinable:
         st.caption("아직 모집 중인 팀이 없어요.")
     else:
-        for gid, host_uid, host_name, member_names, seats_left, menu in joinable:
+        for gid, host_uid, host_name, member_names, seats_left, menu, payer_name in joinable:
             with st.container(border=True):
                 st.write(f"**호스트:** {host_name}")
                 st.write(f"**현재 멤버:** {member_names or '-'}")
                 st.write(f"**남은 자리:** {seats_left}")
                 st.write(f"**메뉴:** {menu or '-'}")
+                if payer_name:
+                    st.write(f"**내가쏜다:** {payer_name} 💳")
 
                 if host_uid != user_id:
                     if st.button("🙋 저요!저요!", key=f"join_{gid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
@@ -393,7 +418,7 @@ def main():
 
                     # 1) If I'm hosting an existing group, invite them to my group
                     if host_group:
-                        _gid, _d, _host_uid, _host_name, member_names, seats_left, menu = host_group
+                        _gid, _d, _host_uid, _host_name, member_names, seats_left, menu, payer_name = host_group
                         invite_label = "🍽️ 우리랑 같이 먹을래요?"
                         invite_disabled = (db.get_status_today(uid) == "Booked") or (int(seats_left or 0) <= 0)
                         if st.button(invite_label, key=f"invite_group_{uid}", use_container_width=True, disabled=invite_disabled):
@@ -402,7 +427,8 @@ def main():
                                 st.warning(err or "요청 실패")
                             else:
                                 st.success("그룹 초대 보냈어요!")
-                        st.caption(f"(내 모임) 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}")
+                        extra = f" | 내가쏜다: {payer_name} 💳" if payer_name else ""
+                        st.caption(f"(내 모임) 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}{extra}")
 
                     # 2) Regular 1:1 invite
                     if st.button("🍚 밥 먹자고 찌르기!", key=f"req_{uid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):

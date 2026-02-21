@@ -116,14 +116,17 @@ def init_db():
                   member_user_ids TEXT,
                   seats_left INTEGER,
                   menu TEXT,
+                  payer_name TEXT,
                   UNIQUE(date, host_user_id))'''
     )
 
-    # Migration: add member_user_ids if missing (legacy)
+    # Migration: add member_user_ids / payer_name if missing (legacy)
     c.execute("PRAGMA table_info(lunch_groups)")
     gcols = {row[1] for row in c.fetchall()}
     if "member_user_ids" not in gcols:
         c.execute("ALTER TABLE lunch_groups ADD COLUMN member_user_ids TEXT")
+    if "payer_name" not in gcols:
+        c.execute("ALTER TABLE lunch_groups ADD COLUMN payer_name TEXT")
 
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_groups_day
@@ -383,7 +386,7 @@ def delete_group(host_user_id: int):
     conn.close()
 
 
-def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: str):
+def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: str, payer_name: str | None = None):
     """Upsert today's hosting group.
 
     Ensures host is registered as a member in group_members.
@@ -399,10 +402,10 @@ def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: st
 
     c.execute(
         """
-        INSERT OR REPLACE INTO lunch_groups (id, date, host_user_id, member_names, member_user_ids, seats_left, menu)
-        VALUES ((SELECT id FROM lunch_groups WHERE date=? AND host_user_id=?), ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO lunch_groups (id, date, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name)
+        VALUES ((SELECT id FROM lunch_groups WHERE date=? AND host_user_id=?), ?, ?, ?, ?, ?, ?, ?)
         """,
-        (today, host_user_id, today, host_user_id, member_names, member_user_ids, int(seats_left), menu),
+        (today, host_user_id, today, host_user_id, member_names, member_user_ids, int(seats_left), menu, payer_name or ""),
     )
 
     # Ensure host is in normalized members
@@ -429,7 +432,7 @@ def get_groups_today():
     c = conn.cursor()
     c.execute(
         """
-        SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
+        SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name
         FROM lunch_groups g
         JOIN users u ON u.user_id = g.host_user_id
         WHERE g.date=?
@@ -447,7 +450,7 @@ def get_group_by_host_on_date(host_user_id: int, date_str: str):
     c = conn.cursor()
     c.execute(
         """
-        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
+        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name
         FROM lunch_groups g
         JOIN users u ON u.user_id = g.host_user_id
         WHERE g.date=? AND g.host_user_id=?
@@ -587,7 +590,7 @@ def get_groups_for_user_on_date(user_id: int, date_str: str):
     c = conn.cursor()
     c.execute(
         """
-        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
+        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name
         FROM group_members gm
         JOIN lunch_groups g ON g.date = gm.date AND g.host_user_id = gm.host_user_id
         JOIN users u ON u.user_id = g.host_user_id
