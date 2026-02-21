@@ -151,13 +151,13 @@ def register_user(
 
     Returns: (ok, error_message)
     """
-    employee_id = (employee_id or "").strip().upper()
+    employee_id = (employee_id or "").strip().lower()
 
-    # employee id rule: 2 letters + 5 digits
+    # employee id rule: 2 lowercase letters + 5 digits
     import re
 
-    if not re.fullmatch(r"[A-Z]{2}\d{5}", employee_id):
-        return False, "사번은 영문자 2개 + 숫자 5개 형식이어야 합니다. (예: AB12345)"
+    if not re.fullmatch(r"[a-z]{2}\d{5}", employee_id):
+        return False, "사번은 영문자 2개 + 숫자 5개 형식이어야 합니다. (예: sl55555)"
 
     if not (pin.isdigit() and len(pin) == 4):
         return False, "비밀번호(PIN)는 숫자 4자리여야 합니다."
@@ -185,7 +185,7 @@ def register_user(
 
 def verify_login(employee_id: str, pin: str) -> tuple[bool, tuple | None]:
     """Returns (ok, user_row)."""
-    employee_id = (employee_id or "").strip().upper()
+    employee_id = (employee_id or "").strip().lower()
     user = get_user_by_employee_id(employee_id)
     if not user:
         return False, None
