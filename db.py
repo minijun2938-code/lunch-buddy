@@ -204,14 +204,23 @@ def get_connection():
 
 
 def reset_today_data():
-    """Delete today's requests/status/groups for a clean test run."""
-    today = datetime.date.today().isoformat()
+    """Delete *today-ish* requests/status/groups for a clean test run.
+
+    Streamlit Cloud may run in UTC while users are in KST, so we clear a 3-day window
+    (yesterday/today/tomorrow) to reliably wipe "today" data.
+
+    NOTE: users table is untouched.
+    """
+    base = datetime.date.today()
+    dates = [(base + datetime.timedelta(days=d)).isoformat() for d in (-1, 0, 1)]
+
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM requests WHERE date=?", (today,))
-    c.execute("DELETE FROM daily_status WHERE date=?", (today,))
-    c.execute("DELETE FROM group_members WHERE date=?", (today,))
-    c.execute("DELETE FROM lunch_groups WHERE date=?", (today,))
+    for ds in dates:
+        c.execute("DELETE FROM requests WHERE date=?", (ds,))
+        c.execute("DELETE FROM daily_status WHERE date=?", (ds,))
+        c.execute("DELETE FROM group_members WHERE date=?", (ds,))
+        c.execute("DELETE FROM lunch_groups WHERE date=?", (ds,))
     conn.commit()
     conn.close()
 
