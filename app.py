@@ -326,88 +326,8 @@ def main():
                             st.caption("(아직 매칭된 점약 정보를 찾지 못했어요. 새로고침 후 다시 시도해줘)")
         
             # --- Status buttons ---
-            st.subheader("👋 오늘 상태는?")
-            c1, c2, c3 = st.columns(3)
-        
-            if my_status == "Booked":
-                st.caption("⚠️ 이미 점심약속이 있는것 같아요! (오늘은 변경/요청이 제한돼요)")
-        
-            with c1:
-                role = st.session_state["user"].get("role")
-                # Sender lock: if I have a pending outgoing invite, I shouldn't set myself to Free.
-                free_disabled = (db.get_status_today(user_id) in ("Booked", "Planning")) or (role in ("팀장", "임원"))
-                if st.button(
-                    "🟢 점약 없어요 불러주세요",
-                    use_container_width=True,
-                    disabled=free_disabled,
-                ):
-                    db.update_status(user_id, "Free")
-                    st.rerun()
-                if role in ("팀장", "임원"):
-                    st.caption("(팀장/임원은 '불러주세요'를 사용할 수 없어요)")
-                if db.get_status_today(user_id) == "Planning":
-                    st.caption("(초대 보낸 상태라서, 초대 철회 전까지는 '불러주세요'로 바꿀 수 없어요)")
-        
-            with c2:
-                if st.button(
-                    "🙅 오늘은 넘어갈게요 (미참여)",
-                    use_container_width=True,
-                    disabled=(db.get_status_today(user_id) == "Booked"),
-                ):
-                    db.update_status(user_id, "Skip")
-                    st.rerun()
-        
-            with c3:
-                if st.button(
-                    "🧑‍🍳 오늘 점심 같이 드실분?",
-                    use_container_width=True,
-                    disabled=False,
-                ):
-                    # Allow hosting anytime (even if already matched/Booked). This is for extra recruiting.
-                    # If already hosting, just open the form.
-                    if my_status != "Booked":
-                        db.update_status(user_id, "Hosting")
-                    st.session_state["hosting_open"] = True
-                    st.rerun()
-        
-            # Hosting inputs
-            hosting_open = st.session_state.get("hosting_open") or (db.get_status_today(user_id) == "Hosting")
-            if hosting_open:
-                st.markdown("### 🧑‍🍳 합류 모집 정보")
-        
-                # Autofill current members: me + (if 1:1 booked) partner(s)
-                partners = db.get_accepted_partners_today(user_id)
-                default_members = ", ".join([current_user] + [name for _uid, name in partners])
-        
-                with st.form("hosting_form"):
-                    member_names = st.text_input("현재 멤버(이름)", value=default_members, key=f"host_members_{user_id}")
-                    seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1, key=f"host_seats_{user_id}")
-                    menu = st.text_input("메뉴", key=f"host_menu_{user_id}")
-        
-                    st.caption("(선택) 내가쏜다!")
-                    payer_name = st.text_input("누가 쏘나요? (이름 입력)", value="", key=f"host_payer_{user_id}")
-                    payer_name = (payer_name or "").strip()
-                    if not payer_name:
-                        payer_name = None
-        
-                    submitted = st.form_submit_button("저장")
-        
-                if submitted:
-                    db.upsert_group(user_id, member_names.strip(), int(seats_left), menu.strip(), payer_name=payer_name)
-                    # Ensure partner user_ids are in normalized group_members without consuming seats
-                    for pid, _pname in partners:
-                        db.ensure_member_in_group(user_id, int(pid), today_str)
-                    # Rebuild display fields
-                    try:
-                        db._rebuild_group_legacy_fields(user_id, today_str)
-                    except Exception:
-                        pass
-                    st.success("저장 완료!")
-        
-            st.markdown("---")
-        
-    with tab_board:
-            # --- Requests ---
+
+    # --- Requests (moved to My tab) ---
             def pretty_status(status: str) -> str:
                 if status == "pending":
                     return "대기중…"
@@ -418,7 +338,7 @@ def main():
                 if status == "cancelled":
                     return "취소됨"
                 return status
-        
+
             incoming = db.list_incoming_requests(user_id)
             outgoing = db.list_outgoing_requests(user_id)
         
@@ -528,7 +448,87 @@ def main():
                                 st.rerun()
         
             st.markdown("---")
+            st.subheader("👋 오늘 상태는?")
+            c1, c2, c3 = st.columns(3)
         
+            if my_status == "Booked":
+                st.caption("⚠️ 이미 점심약속이 있는것 같아요! (오늘은 변경/요청이 제한돼요)")
+        
+            with c1:
+                role = st.session_state["user"].get("role")
+                # Sender lock: if I have a pending outgoing invite, I shouldn't set myself to Free.
+                free_disabled = (db.get_status_today(user_id) in ("Booked", "Planning")) or (role in ("팀장", "임원"))
+                if st.button(
+                    "🟢 점약 없어요 불러주세요",
+                    use_container_width=True,
+                    disabled=free_disabled,
+                ):
+                    db.update_status(user_id, "Free")
+                    st.rerun()
+                if role in ("팀장", "임원"):
+                    st.caption("(팀장/임원은 '불러주세요'를 사용할 수 없어요)")
+                if db.get_status_today(user_id) == "Planning":
+                    st.caption("(초대 보낸 상태라서, 초대 철회 전까지는 '불러주세요'로 바꿀 수 없어요)")
+        
+            with c2:
+                if st.button(
+                    "🙅 오늘은 넘어갈게요 (미참여)",
+                    use_container_width=True,
+                    disabled=(db.get_status_today(user_id) == "Booked"),
+                ):
+                    db.update_status(user_id, "Skip")
+                    st.rerun()
+        
+            with c3:
+                if st.button(
+                    "🧑‍🍳 오늘 점심 같이 드실분?",
+                    use_container_width=True,
+                    disabled=False,
+                ):
+                    # Allow hosting anytime (even if already matched/Booked). This is for extra recruiting.
+                    # If already hosting, just open the form.
+                    if my_status != "Booked":
+                        db.update_status(user_id, "Hosting")
+                    st.session_state["hosting_open"] = True
+                    st.rerun()
+        
+            # Hosting inputs
+            hosting_open = st.session_state.get("hosting_open") or (db.get_status_today(user_id) == "Hosting")
+            if hosting_open:
+                st.markdown("### 🧑‍🍳 합류 모집 정보")
+        
+                # Autofill current members: me + (if 1:1 booked) partner(s)
+                partners = db.get_accepted_partners_today(user_id)
+                default_members = ", ".join([current_user] + [name for _uid, name in partners])
+        
+                with st.form("hosting_form"):
+                    member_names = st.text_input("현재 멤버(이름)", value=default_members, key=f"host_members_{user_id}")
+                    seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1, key=f"host_seats_{user_id}")
+                    menu = st.text_input("메뉴", key=f"host_menu_{user_id}")
+        
+                    st.caption("(선택) 내가쏜다!")
+                    payer_name = st.text_input("누가 쏘나요? (이름 입력)", value="", key=f"host_payer_{user_id}")
+                    payer_name = (payer_name or "").strip()
+                    if not payer_name:
+                        payer_name = None
+        
+                    submitted = st.form_submit_button("저장")
+        
+                if submitted:
+                    db.upsert_group(user_id, member_names.strip(), int(seats_left), menu.strip(), payer_name=payer_name)
+                    # Ensure partner user_ids are in normalized group_members without consuming seats
+                    for pid, _pname in partners:
+                        db.ensure_member_in_group(user_id, int(pid), today_str)
+                    # Rebuild display fields
+                    try:
+                        db._rebuild_group_legacy_fields(user_id, today_str)
+                    except Exception:
+                        pass
+                    st.success("저장 완료!")
+        
+            st.markdown("---")
+        
+    with tab_board:
             # --- Dashboard ---
             st.subheader("👀 동료들의 점심 현황")
         
