@@ -250,12 +250,28 @@ def main():
                     st.caption("아직 대화가 없어요.")
                 else:
                     # One stable scroll area (chat_message + nested containers can behave oddly)
+                    import html as _html
                     with st.container(height=280, border=True):
-                        # show last 50 in the scroll area
+                        items = []
                         for _uid, uname, msg, ts in chat_rows[-50:]:
-                            st.markdown(f"**{uname}** · {ts}")
-                            st.write(msg)
-                            st.divider()
+                            items.append(
+                                f"<div class='lb-chat-item'>"
+                                f"<div class='lb-chat-meta'><b>{_html.escape(str(uname))}</b> · {_html.escape(str(ts))}</div>"
+                                f"<div class='lb-chat-msg'>{_html.escape(str(msg))}</div>"
+                                f"</div>"
+                            )
+
+                        st.markdown(
+                            """
+<style>
+.lb-chat-item{padding:6px 8px;border-bottom:1px solid rgba(49,51,63,0.12);}
+.lb-chat-meta{font-size:12px;opacity:0.75;line-height:1.15;margin-bottom:2px;}
+.lb-chat-msg{font-size:14px;line-height:1.25;margin:0;}
+</style>
+"""
+                            + "\n".join(items),
+                            unsafe_allow_html=True,
+                        )
 
                 text = st.chat_input("메시지 입력…")
                 if text:
