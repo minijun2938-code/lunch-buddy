@@ -189,7 +189,7 @@ def main():
                     st.error("프로필 정보를 불러오지 못했어요.")
 
             st.markdown("---")
-            st.subheader("📚 점심 기록")
+            st.subheader(f"📚 {('점심' if meal=='lunch' else '저녁')} 기록")
             sidebar_user_id = u["user_id"]
             dates = db.list_my_group_dates(sidebar_user_id, meal=meal)
             if dates:
@@ -198,7 +198,7 @@ def main():
                 if groups:
                     gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name, _g_kind = groups[0]
                     members = db.list_group_members(host_uid, sel, meal=meal)
-                    st.write(f"**{sel} 점심 기록**")
+                    st.write(f"**{sel} {('점심' if meal=='lunch' else '저녁')} 기록**")
                     st.write(f"멤버: {', '.join([db.format_name(n, en) for _uid, n, en in members]) if members else (member_names or '-')}")
                     st.write(f"메뉴: {menu or '-'}")
                     if payer_name:
@@ -291,7 +291,10 @@ def main():
     if db.get_status_today(user_id, meal=meal) == "Hosting" and not db.get_group_by_host_today(user_id, meal=meal):
         db.clear_status_today(user_id, meal=meal)
 
-    tab_my, tab_board = st.tabs(["🍱 오늘 나의 점심 현황", "📌 점심찾기 게시판"])
+    tab_my, tab_board = st.tabs([
+        f"🍱 오늘 나의 {('점심' if meal=='lunch' else '저녁')} 현황",
+        f"📌 {('점심' if meal=='lunch' else '저녁')}찾기 게시판",
+    ])
     with tab_my:
             # --- My status ---
             st.subheader("🙋 내 현황")
@@ -311,9 +314,9 @@ def main():
                         st.error(err or "취소 실패")
             else:
                 status_text = {
-                    "Free": "점약 없어요(불러주세요) 🟢",
-                    "Hosting": "오늘 점심 같이 드실분? 모집중 🧑‍🍳",
-                    "Planning": "점약 잡는 중 🟠",
+                    "Free": f"{('점심' if meal=='lunch' else '저녁')} 약속 없어요(불러주세요) 🟢",
+                    "Hosting": f"오늘 {('점심' if meal=='lunch' else '저녁')} 같이 하실분? 모집중 🧑‍🍳",
+                    "Planning": f"{('점심' if meal=='lunch' else '저녁')} 약속 잡는 중 🟠",
                     "Skip": "오늘은 넘어갈게요 (미참여) 🙅",
                     "Not Set": "(미정)",
                 }.get(my_status, my_status)
@@ -558,10 +561,10 @@ def main():
             outgoing = db.list_outgoing_requests(user_id, meal=meal)
 
             confirmed = [r for r in incoming if r[3] == "accepted"] + [r for r in outgoing if r[3] == "accepted"]
-            st.subheader("📊 오늘 점심 성사")
+            st.subheader(f"📊 오늘 {('점심' if meal=='lunch' else '저녁')} 성사")
             st.metric("성사 건수", len(confirmed))
 
-            st.subheader("📩 오늘 받은 점심 초대")
+            st.subheader(f"📩 오늘 받은 {('점심' if meal=='lunch' else '저녁')} 초대")
             if not incoming:
                 st.caption("아직 받은 초대가 없어요.")
             else:
@@ -638,7 +641,7 @@ def main():
                                     db.update_request_status(req_id, "declined")
                                     st.rerun()
 
-            st.subheader("📤 오늘 내가 보낸 초대")
+            st.subheader(f"📤 오늘 내가 보낸 {('점심' if meal=='lunch' else '저녁')} 초대")
             if not outgoing:
                 st.caption("아직 보낸 초대가 없어요.")
             else:
