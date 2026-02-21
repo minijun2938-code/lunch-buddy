@@ -342,6 +342,39 @@ def register_user(
         conn.close()
 
 
+def update_user_profile(
+    *,
+    user_id: int,
+    username: str,
+    english_name: str,
+    team: str,
+    years: int,
+) -> tuple[bool, str | None]:
+    """Update basic profile fields (employee_id excluded)."""
+    try:
+        years = int(years)
+        if years < 0 or years > 60:
+            return False, "연차 값이 올바르지 않습니다."
+    except Exception:
+        return False, "연차 값이 올바르지 않습니다."
+
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE users SET username=?, english_name=?, team=?, years=? WHERE user_id=?",
+        (
+            (username or "").strip(),
+            (english_name or "").strip(),
+            (team or "").strip(),
+            years,
+            int(user_id),
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return True, None
+
+
 def verify_login(employee_id: str, pin: str) -> tuple[bool, tuple | None]:
     """PIN-based login (4 digits). Returns (ok, user_row)."""
     employee_id = (employee_id or "").strip().lower()
