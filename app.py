@@ -425,8 +425,8 @@ def main():
                 st.caption(f"상태: {pretty_status(status)} · {ts}")
 
                 if status == "pending":
-                    # If I'm already planning (I sent/received another request), block accepting others
-                    accept_disabled = (db.get_status_today(user_id) == "Planning")
+                    # Accept should always be possible unless already Booked
+                    accept_disabled = (db.get_status_today(user_id) == "Booked")
                     a, b = st.columns(2)
                     with a:
                         if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True, disabled=accept_disabled):
