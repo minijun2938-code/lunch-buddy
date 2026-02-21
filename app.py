@@ -444,7 +444,7 @@ def main():
                                     target_uid = int(user_id)
                                     target_name = current_user
 
-                                ok_add, err_add = db.add_member_to_group(host_id, target_uid, target_name)
+                                ok_add, err_add = db.accept_group_join(host_id, target_uid, target_name)
                                 if ok_add:
                                     db.set_booked_for_group(host_id)
                                 else:

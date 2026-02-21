@@ -606,6 +606,58 @@ def ensure_member_in_group(host_user_id: int, user_id: int, date_str: str):
     conn.close()
 
 
+def accept_group_join(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
+    """Accept a join by ensuring membership + decrementing seats_left + syncing display fields.
+
+    This is used at the moment a pending join invite is accepted.
+    """
+    today = datetime.date.today().isoformat()
+    member_name = (member_name or "").strip()
+    if not member_name:
+        return False, "member_name이 비어있습니다."
+
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "SELECT seats_left FROM lunch_groups WHERE date=? AND host_user_id=?",
+            (today, host_user_id),
+        )
+        row = c.fetchone()
+        if not row:
+            return False, "모집글을 찾지 못했어요."
+
+        # Ensure host + member in normalized members
+        c.execute(
+            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+            (today, host_user_id, host_user_id),
+        )
+        c.execute(
+            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+            (today, host_user_id, member_user_id),
+        )
+
+        # Decrement seats once (accept-time)
+        c.execute(
+            "UPDATE lunch_groups SET seats_left = seats_left - 1 WHERE date=? AND host_user_id=? AND seats_left > 0",
+            (today, host_user_id),
+        )
+        if c.rowcount == 0:
+            return False, "남은 자리가 없어요."
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Sync legacy display fields from normalized members
+    try:
+        _rebuild_group_legacy_fields(host_user_id, today)
+    except Exception:
+        pass
+
+    return True, None
+
+
 def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
     """Append member to today's host group and decrement seats_left (atomic-ish).
 
