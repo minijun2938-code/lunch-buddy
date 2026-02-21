@@ -1290,8 +1290,11 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     Returns: (request_id, error_message)
     """
     # one-lunch rule
+    # If I'm inviting someone into my own hosting group (group_host_user_id == from_user_id),
+    # allow even if I'm already Booked/Planning.
     if get_status_today(from_user_id) in ("Booked", "Planning"):
-        return None, "이미 점심약속이 있는것 같아요!"
+        if not (group_host_user_id and int(group_host_user_id) == int(from_user_id)):
+            return None, "이미 점심약속이 있는것 같아요!"
 
     # Allow inviting a Booked user in two cases:
     # - join request to that booked host's group (group_host_user_id == to_user_id)
