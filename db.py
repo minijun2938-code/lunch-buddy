@@ -525,20 +525,60 @@ def set_booked_for_group(host_user_id: int):
 def get_groups_for_user_today(user_id: int):
     """Groups where user_id is a member (normalized group_members)."""
     today = datetime.date.today().isoformat()
+    return get_groups_for_user_on_date(user_id, today)
+
+
+def get_groups_for_user_on_date(user_id: int, date_str: str):
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
-        SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
+        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
         FROM group_members gm
         JOIN lunch_groups g ON g.date = gm.date AND g.host_user_id = gm.host_user_id
         JOIN users u ON u.user_id = g.host_user_id
         WHERE gm.date=? AND gm.user_id=?
         ORDER BY g.id DESC
         """,
-        (today, user_id),
+        (date_str, user_id),
     )
     rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def list_group_members(host_user_id: int, date_str: str):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT u.user_id, u.username
+        FROM group_members gm
+        JOIN users u ON u.user_id = gm.user_id
+        WHERE gm.date=? AND gm.host_user_id=?
+        ORDER BY u.username
+        """,
+        (date_str, host_user_id),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def list_my_group_dates(user_id: int, limit: int = 30):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT DISTINCT gm.date
+        FROM group_members gm
+        WHERE gm.user_id=?
+        ORDER BY gm.date DESC
+        LIMIT ?
+        """,
+        (user_id, limit),
+    )
+    rows = [r[0] for r in c.fetchall()]
     conn.close()
     return rows
 
