@@ -1293,9 +1293,17 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     if get_status_today(from_user_id) in ("Booked", "Planning"):
         return None, "이미 점심약속이 있는것 같아요!"
 
-    # Allow inviting a Booked host ONLY when it's a join request to that host's group.
-    if get_status_today(to_user_id) == "Booked" and not (group_host_user_id and int(group_host_user_id) == int(to_user_id)):
-        return None, "이미 점심약속이 있는것 같아요!"
+    # Allow inviting a Booked user in two cases:
+    # - join request to that booked host's group (group_host_user_id == to_user_id)
+    # - host inviting someone into their own group while booked (group_host_user_id == from_user_id)
+    if get_status_today(to_user_id) == "Booked":
+        ok = False
+        if group_host_user_id and int(group_host_user_id) == int(to_user_id):
+            ok = True
+        if group_host_user_id and int(group_host_user_id) == int(from_user_id):
+            ok = True
+        if not ok:
+            return None, "이미 점심약속이 있는것 같아요!"
 
     today = kst_today_iso()
     conn = get_connection()
