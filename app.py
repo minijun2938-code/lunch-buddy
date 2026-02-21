@@ -462,5 +462,21 @@ def main():
                     if disabled:
                         st.caption("이미 오늘 초대를 보냈어요(대기중).")
 
+    st.markdown("---")
+
+    # Section C: Booked people (accepted only)
+    st.markdown("### ✅ 성사완료")
+    booked_people = [o for o in others if o[2] == "Booked"]
+    if not booked_people:
+        st.caption("아직 성사완료된 사람이 없어요.")
+    else:
+        st.caption("수락(accepted)된 경우에만 여기로 내려옵니다.")
+        cols = st.columns(4)
+        for i, (uid, uname, status, _t_chat_id) in enumerate(booked_people):
+            with cols[i % 4]:
+                with st.container(border=True):
+                    st.markdown(f"### {uname}")
+                    st.write("상태: 점약 있어요 🎉")
+
 if __name__ == "__main__":
     main()
