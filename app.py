@@ -163,14 +163,30 @@ def main():
 
     if my_status == "Booked":
         st.markdown("## 점약 있어요 🎉")
-        if st.button("🚫 점약 취소하기", type="primary"):
-            ok, err = db.cancel_booking_for_user(user_id)
-            if ok:
-                st.success("취소 완료")
-                st.session_state.pop("hosting_open", None)
+
+        # Buttons: detail toggle + cancel
+        if "show_booking_detail" not in st.session_state:
+            st.session_state["show_booking_detail"] = False
+
+        b1, b2 = st.columns([1, 1])
+        with b1:
+            if st.button(
+                "📄 상세보기" if not st.session_state["show_booking_detail"] else "📄 상세 숨기기",
+                use_container_width=True,
+            ):
+                st.session_state["show_booking_detail"] = not st.session_state["show_booking_detail"]
                 st.rerun()
-            else:
-                st.error(err or "취소 실패")
+
+        with b2:
+            if st.button("🚫 점약 취소하기", type="primary", use_container_width=True):
+                ok, err = db.cancel_booking_for_user(user_id)
+                if ok:
+                    st.success("취소 완료")
+                    st.session_state.pop("hosting_open", None)
+                    st.session_state["show_booking_detail"] = False
+                    st.rerun()
+                else:
+                    st.error(err or "취소 실패")
     else:
         status_text = {
             "Free": "점약 없어요(불러주세요) 🟢",
@@ -181,41 +197,44 @@ def main():
         }.get(my_status, my_status)
         st.info(f"현재 내 상태: **{status_text}**")
 
-    # Show who/what if I'm in a group today (even if not Booked yet)
-    my_groups_today = db.get_groups_for_user_today(user_id)
-    if my_groups_today:
-        gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
-        st.markdown("**오늘 같이 먹는 멤버**")
-        members = db.list_group_members(host_uid, today_str)
-        st.write(", ".join([name for _uid, name in members]) if members else (member_names or "-"))
-        st.markdown(f"**메뉴:** {menu or '-'}")
-        if payer_name:
-            st.markdown(f"**내가쏜다:** {payer_name} 💳")
-        st.caption(f"호스트: {host_name}")
-    else:
-        # 1:1 booked detail (no group) → auto-create a 1:1 group so details can be stored/shown
-        if my_status == "Booked":
-            d = db.get_latest_accepted_1to1_detail_today(user_id)
-            if d:
-                _req_id, other_id, other_name, ts = d
-                db.ensure_1to1_group_today(user_id, int(other_id))
+    # Show who/what
+    show_detail = (my_status != "Booked") or st.session_state.get("show_booking_detail", False)
 
-                # re-fetch as group
-                my_groups_today = db.get_groups_for_user_today(user_id)
-                if my_groups_today:
-                    gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
-                    st.markdown("**오늘 점약 상세**")
-                    members = db.list_group_members(host_uid, today_str)
-                    st.write("함께: " + (", ".join([name for _uid, name in members]) if members else (member_names or "-")))
-                    st.markdown(f"**메뉴:** {menu or '-'}")
-                    if payer_name:
-                        st.markdown(f"**내가쏜다:** {payer_name} 💳")
-                    st.caption(f"시간: {ts}")
-                else:
-                    st.markdown("**오늘 점약(1:1) 상세**")
-                    st.write(f"함께: {current_user} + {other_name}")
-                    st.write("메뉴: -")
-                    st.caption(f"시간: {ts}")
+    if show_detail:
+        my_groups_today = db.get_groups_for_user_today(user_id)
+        if my_groups_today:
+            gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
+            st.markdown("**오늘 점약 상세**" if my_status == "Booked" else "**오늘 같이 먹는 멤버**")
+            members = db.list_group_members(host_uid, today_str)
+            st.write(", ".join([name for _uid, name in members]) if members else (member_names or "-"))
+            st.markdown(f"**메뉴:** {menu or '-'}")
+            if payer_name:
+                st.markdown(f"**내가쏜다:** {payer_name} 💳")
+            st.caption(f"호스트: {host_name}")
+        else:
+            # 1:1 booked detail (no group) → auto-create a 1:1 group so details can be stored/shown
+            if my_status == "Booked":
+                d = db.get_latest_accepted_1to1_detail_today(user_id)
+                if d:
+                    _req_id, other_id, other_name, ts = d
+                    db.ensure_1to1_group_today(user_id, int(other_id))
+
+                    # re-fetch as group
+                    my_groups_today = db.get_groups_for_user_today(user_id)
+                    if my_groups_today:
+                        gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
+                        st.markdown("**오늘 점약 상세**")
+                        members = db.list_group_members(host_uid, today_str)
+                        st.write("함께: " + (", ".join([name for _uid, name in members]) if members else (member_names or "-")))
+                        st.markdown(f"**메뉴:** {menu or '-'}")
+                        if payer_name:
+                            st.markdown(f"**내가쏜다:** {payer_name} 💳")
+                        st.caption(f"시간: {ts}")
+                    else:
+                        st.markdown("**오늘 점약(1:1) 상세**")
+                        st.write(f"함께: {current_user} + {other_name}")
+                        st.write("메뉴: -")
+                        st.caption(f"시간: {ts}")
 
     # --- Status buttons ---
     st.subheader("👋 오늘 상태는?")
