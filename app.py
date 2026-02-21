@@ -67,12 +67,13 @@ def main():
                 sel = st.selectbox("날짜 선택", dates, index=0)
                 groups = db.get_groups_for_user_on_date(sidebar_user_id, sel)
                 if groups:
-                    gid, gdate, host_uid, host_name, member_names, seats_left, menu = groups[0]
+                    gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = groups[0]
                     members = db.list_group_members(host_uid, sel)
                     st.write(f"**{sel} 점심 기록**")
                     st.write(f"멤버: {', '.join([n for _uid, n in members]) if members else (member_names or '-')}")
-                    if menu:
-                        st.write(f"메뉴: {menu}")
+                    st.write(f"메뉴: {menu or '-'}")
+                    if payer_name:
+                        st.write(f"내가쏜다: {payer_name} 💳")
                     st.caption(f"호스트: {host_name}")
                 else:
                     st.caption("해당 날짜 기록이 없어요.")
