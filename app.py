@@ -472,6 +472,8 @@ def main():
                                     db.add_member_fixed_group(int(my_host_uid), int(from_uid), from_name)
                                 else:
                                     # create a fixed group for me and add the partner
+                                    # New booking → reset chat
+                                    db.clear_group_chat(int(user_id), today_str)
                                     db.ensure_fixed_group_today(int(user_id))
                                     db.add_member_fixed_group(int(user_id), int(from_uid), from_name)
 

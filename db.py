@@ -1127,6 +1127,14 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     return True, None
 
 
+def clear_group_chat(host_user_id: int, date_str: str):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM group_chat WHERE date=? AND host_user_id=?", (date_str, host_user_id))
+    conn.commit()
+    conn.close()
+
+
 def list_group_chat(host_user_id: int, date_str: str, limit: int = 200):
     conn = get_connection()
     c = conn.cursor()
