@@ -886,8 +886,40 @@ def _rebuild_group_legacy_fields(host_user_id: int, date_str: str):
     conn.close()
 
 
+def _auto_cancel_group_if_single(host_user_id: int, date_str: str):
+    """If only one member remains in the group, dissolve the group and clear remaining member status."""
+    members = list_group_members(host_user_id, date_str)
+    if len(members) != 1:
+        return
+
+    remaining_uid, _remaining_name = members[0]
+
+    # cancel any accepted requests involving the remaining user today
+    try:
+        cancel_accepted_for_users([int(remaining_uid)])
+    except Exception:
+        pass
+
+    # clear status so it becomes (미정)
+    try:
+        clear_status_today(int(remaining_uid))
+    except Exception:
+        pass
+
+    # remove group data
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM group_members WHERE date=? AND host_user_id=?", (date_str, host_user_id))
+    c.execute("DELETE FROM lunch_groups WHERE date=? AND host_user_id=?", (date_str, host_user_id))
+    conn.commit()
+    conn.close()
+
+
 def remove_member_from_group(host_user_id: int, user_id: int, date_str: str) -> tuple[bool, str | None]:
-    """Remove a member from a host group and increment seats_left."""
+    """Remove a member from a host group and increment seats_left.
+
+    If the group collapses to a single person, auto-cancel it.
+    """
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -907,6 +939,7 @@ def remove_member_from_group(host_user_id: int, user_id: int, date_str: str) -> 
     conn.close()
 
     _rebuild_group_legacy_fields(host_user_id, date_str)
+    _auto_cancel_group_if_single(host_user_id, date_str)
     return True, None
 
 
