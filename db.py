@@ -430,6 +430,28 @@ def get_groups_today():
     return rows
 
 
+def get_group_by_host_on_date(host_user_id: int, date_str: str):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
+        FROM lunch_groups g
+        JOIN users u ON u.user_id = g.host_user_id
+        WHERE g.date=? AND g.host_user_id=?
+        LIMIT 1
+        """,
+        (date_str, host_user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    return row
+
+
+def get_group_by_host_today(host_user_id: int):
+    return get_group_by_host_on_date(host_user_id, datetime.date.today().isoformat())
+
+
 def ensure_member_in_group(host_user_id: int, user_id: int, date_str: str):
     conn = get_connection()
     c = conn.cursor()

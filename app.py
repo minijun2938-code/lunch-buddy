@@ -275,7 +275,15 @@ def main():
     else:
         for req_id, from_uid, from_name, status, ts, group_host_user_id in incoming:
             with st.container(border=True):
-                st.write(f"**{from_name}** → 나")
+                if group_host_user_id:
+                    g = db.get_group_by_host_today(int(group_host_user_id))
+                    st.write(f"**{from_name}** → 나 (그룹 합류 초대)")
+                    if g:
+                        _gid, _d, _host_uid, host_name, member_names, seats_left, menu = g
+                        st.caption(f"초대 팀: {host_name} | 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}")
+                else:
+                    st.write(f"**{from_name}** → 나")
+
                 st.caption(f"상태: {pretty_status(status)} · {ts}")
 
                 if status == "pending":
@@ -285,7 +293,7 @@ def main():
                             db.update_request_status(req_id, "accepted")
 
                             if group_host_user_id:
-                                ok_add, err_add = db.add_member_to_group(int(group_host_user_id), from_uid, from_name)
+                                ok_add, err_add = db.add_member_to_group(int(group_host_user_id), user_id, current_user)
                                 if ok_add:
                                     db.set_booked_for_group(int(group_host_user_id))
                                 else:
@@ -351,6 +359,9 @@ def main():
     st.markdown("---")
 
     st.markdown("### 🟢 점약 없어요 불러주세요")
+
+    host_group = db.get_group_by_host_today(user_id)
+
     free_people = [o for o in others if o[2] == "Free"]
     if not free_people:
         st.caption("지금 '불러주세요' 상태인 사람이 없어요.")
@@ -360,6 +371,21 @@ def main():
             with cols[i % 4]:
                 with st.container(border=True):
                     st.markdown(f"### {uname}")
+
+                    # 1) If I'm hosting an existing group, invite them to my group
+                    if host_group:
+                        _gid, _d, _host_uid, _host_name, member_names, seats_left, menu = host_group
+                        invite_label = "🍽️ 우리랑 같이 먹을래요?"
+                        invite_disabled = (db.get_status_today(uid) == "Booked") or (int(seats_left or 0) <= 0)
+                        if st.button(invite_label, key=f"invite_group_{uid}", use_container_width=True, disabled=invite_disabled):
+                            req_id, err = db.create_request(user_id, uid, group_host_user_id=user_id)
+                            if not req_id:
+                                st.warning(err or "요청 실패")
+                            else:
+                                st.success("그룹 초대 보냈어요!")
+                        st.caption(f"(내 모임) 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}")
+
+                    # 2) Regular 1:1 invite
                     if st.button("🍚 밥 먹자고 찌르기!", key=f"req_{uid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
                         req_id, err = db.create_request(user_id, uid)
                         if not req_id:
