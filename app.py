@@ -2,11 +2,31 @@ import streamlit as st
 import datetime
 import db
 import bot
-from streamlit_cookies_manager import EncryptedCookieManager
-from streamlit_js_eval import streamlit_js_eval
+# Optional deps: keep the app running even if Streamlit Cloud install hiccups.
+try:
+    from streamlit_cookies_manager import EncryptedCookieManager
+except Exception:
+    EncryptedCookieManager = None
+
+try:
+    from streamlit_js_eval import streamlit_js_eval
+except Exception:
+    def streamlit_js_eval(_js: str, key: str | None = None):
+        return None
+
+
+class _NoopCookies(dict):
+    def ready(self):
+        return True
+
+    def save(self):
+        return None
 
 
 def get_cookie_manager():
+    if EncryptedCookieManager is None:
+        return _NoopCookies()
+
     password = None
     try:
         password = st.secrets.get("COOKIE_PASSWORD")
