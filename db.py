@@ -373,7 +373,7 @@ def set_planning(user_id: int):
 
 
 def has_accepted_today(user_id: int) -> bool:
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -456,7 +456,7 @@ def clear_status_today(user_id: int, *, clear_hosting: bool = True):
 
     If clear_hosting=True, also remove the user's hosting listing for today.
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM daily_status WHERE date=? AND user_id=?", (today, user_id))
@@ -478,7 +478,7 @@ def update_status(user_id, status, *, force: bool = False):
 
     Use force=True for admin/cleanup flows (e.g., cancellation).
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
 
     current = get_status_today(user_id)
     if (not force) and current == "Booked" and status not in ("Booked",):
@@ -504,7 +504,7 @@ def update_status(user_id, status, *, force: bool = False):
 
 
 def delete_group(host_user_id: int):
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM lunch_groups WHERE date=? AND host_user_id=?", (today, host_user_id))
@@ -517,7 +517,7 @@ def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: st
 
     Ensures host is registered as a member in group_members.
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
 
     conn = get_connection()
     c = conn.cursor()
@@ -553,7 +553,7 @@ def get_groups_today():
     Hosts may be Booked (e.g., 1:1 already fixed but still recruiting more).
     We treat the existence of a lunch_groups row as 'hosting'.
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -601,7 +601,7 @@ def update_group_menu_payer(host_user_id: int, date_str: str, menu: str | None, 
 
 
 def get_group_by_host_today(host_user_id: int):
-    return get_group_by_host_on_date(host_user_id, datetime.date.today().isoformat())
+    return get_group_by_host_on_date(host_user_id, kst_today_iso())
 
 
 def ensure_member_in_group(host_user_id: int, user_id: int, date_str: str):
@@ -617,7 +617,7 @@ def ensure_member_in_group(host_user_id: int, user_id: int, date_str: str):
 
 def ensure_fixed_group_today(host_user_id: int):
     """Ensure a non-recruiting group exists (seats_left=0) for the host today."""
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     try:
@@ -636,7 +636,7 @@ def ensure_fixed_group_today(host_user_id: int):
 
 def add_member_fixed_group(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
     """Add member to host's fixed group (no seats decrement)."""
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     member_name = (member_name or "").strip()
     if not member_name:
         return False, "member_name이 비어있습니다."
@@ -667,7 +667,7 @@ def accept_group_join(host_user_id: int, member_user_id: int, member_name: str) 
 
     This is used at the moment a pending join invite is accepted.
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     member_name = (member_name or "").strip()
     if not member_name:
         return False, "member_name이 비어있습니다."
@@ -719,7 +719,7 @@ def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str
 
     Uses normalized group_members + keeps legacy CSV fields in sync for display.
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     member_name = (member_name or "").strip()
     if not member_name:
         return False, "member_name이 비어있습니다."
@@ -797,7 +797,7 @@ def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str
 
 
 def set_booked_for_group(host_user_id: int):
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -817,7 +817,7 @@ def set_booked_for_group(host_user_id: int):
 
 def get_groups_for_user_today(user_id: int):
     """Groups where user_id is a member (normalized group_members)."""
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     return get_groups_for_user_on_date(user_id, today)
 
 
@@ -945,7 +945,7 @@ def remove_member_from_group(host_user_id: int, user_id: int, date_str: str) -> 
 
 def cancel_accepted_for_users(user_ids: list[int]):
     """Cancel today's accepted requests for the given users."""
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     for uid in user_ids:
@@ -963,7 +963,7 @@ def cancel_accepted_for_users(user_ids: list[int]):
 
 def get_accepted_partners_today(user_id: int):
     """For 1:1 accepted lunches (no group), return the other user(s)."""
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -984,7 +984,7 @@ def get_accepted_partners_today(user_id: int):
 
 def get_latest_accepted_group_host_today(user_id: int) -> int | None:
     """If user accepted/joined a group today, return group_host_user_id."""
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1009,7 +1009,7 @@ def ensure_1to1_group_today(user_a: int, user_b: int):
     Host is deterministic (min user_id) to avoid duplicates.
     seats_left=0 by default.
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     host_uid = int(min(user_a, user_b))
     other_uid = int(max(user_a, user_b))
 
@@ -1054,7 +1054,7 @@ def ensure_1to1_group_today(user_a: int, user_b: int):
 
 def get_latest_accepted_1to1_detail_today(user_id: int):
     """Return (req_id, other_user_id, other_name, timestamp) for latest accepted 1:1 request."""
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1083,7 +1083,7 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     - If 1:1 booking: cancel both sides (set statuses Free).
     - If group booking (>2): remove only this user from the group (set status Free).
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
 
     # If user is in a group, use that as source of truth.
     groups = get_groups_for_user_on_date(user_id, today)
@@ -1258,7 +1258,7 @@ def delete_auth_session(token: str):
     conn.close()
 
 def _has_host_group_today(user_id: int) -> bool:
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1277,7 +1277,7 @@ def get_all_statuses():
     - If stored status is Booked but there is no accepted request today → treat as Not Set.
     - If stored status is Hosting but there is no lunch_groups row today → treat as Not Set.
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1388,7 +1388,7 @@ def cancel_pending_requests_for_user(user_id: int):
     Exception: if the user is hosting a group, allow pending join requests to that
     group (group_host_user_id == user_id) to stay pending.
     """
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1424,7 +1424,7 @@ def cancel_request(request_id):
 
 
 def get_pending_request_between(from_user_id, to_user_id):
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
