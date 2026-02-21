@@ -12,42 +12,76 @@ def main():
     st.title("🍱 Lunch Buddy: 오늘 점심 뭐 먹지?")
     st.markdown("---")
 
-    # --- User Identification (Sidebar) ---
+    # --- Auth (Sidebar) ---
     with st.sidebar:
-        st.header("👤 내 정보")
-        username = st.text_input("이름 (닉네임)", key="username_input")
-        chat_id = st.text_input(
-            "텔레그램 Chat ID (선택)",
-            help="초기엔 비워도 됩니다. (추후: 봇 /start로 자동 연결 예정)",
-        )
+        st.header("🔐 로그인")
 
-        if st.button("등록 / 로그인"):
-            if username:
-                existing = db.get_user(username)
-                if not existing:
-                    db.register_user(username, chat_id or None)
-                    st.success(f"반가워요, {username}님! 등록되었습니다.")
-                else:
-                    st.info(f"어서오세요, {username}님!")
-                    # Optional: update chat id if user typed it now
-                    if chat_id:
-                        db.update_user_chat_id(existing[0], chat_id)
-
-                st.session_state["user"] = {"username": username}
+        if "user" in st.session_state:
+            st.success(f"로그인됨: {st.session_state['user']['username']}")
+            if st.button("로그아웃"):
+                del st.session_state["user"]
                 st.rerun()
+        else:
+            tab_login, tab_signup = st.tabs(["로그인", "회원가입"])
+
+            with tab_login:
+                employee_id = st.text_input("사번", key="login_employee_id")
+                pin = st.text_input("비밀번호(PIN, 4자리)", type="password", key="login_pin")
+
+                if st.button("로그인", use_container_width=True):
+                    ok, user = db.verify_login(employee_id.strip(), pin.strip())
+                    if ok:
+                        user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = user
+                        st.session_state["user"] = {
+                            "user_id": user_id,
+                            "username": username,
+                            "employee_id": emp_id,
+                            "team": team,
+                            "mbti": mbti,
+                            "age": age,
+                            "years": years,
+                            "telegram_chat_id": telegram_chat_id,
+                        }
+                        st.rerun()
+                    else:
+                        st.error("사번 또는 비밀번호가 올바르지 않습니다.")
+
+            with tab_signup:
+                st.caption("비밀번호는 숫자 4자리(PIN)로 설정합니다.")
+                su_name = st.text_input("이름", key="su_name")
+                su_team = st.text_input("팀명", key="su_team")
+                su_mbti = st.text_input("MBTI", key="su_mbti")
+                su_age = st.number_input("나이", min_value=0, max_value=120, value=30, step=1, key="su_age")
+                su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1, key="su_years")
+                su_emp = st.text_input("사번", key="su_emp")
+                su_pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password", key="su_pin")
+                su_pin2 = st.text_input("비밀번호 확인", type="password", key="su_pin2")
+
+                if st.button("회원가입", use_container_width=True):
+                    if su_pin != su_pin2:
+                        st.error("비밀번호가 일치하지 않습니다.")
+                    else:
+                        ok, err = db.register_user(
+                            username=su_name.strip(),
+                            team=su_team.strip(),
+                            mbti=su_mbti.strip().upper(),
+                            age=int(su_age),
+                            years=int(su_years),
+                            employee_id=su_emp.strip(),
+                            pin=su_pin.strip(),
+                        )
+                        if ok:
+                            st.success("회원가입 완료! 이제 로그인 해주세요.")
+                        else:
+                            st.error(err or "회원가입 실패")
 
     # check session
     if "user" not in st.session_state:
-        st.warning("👈 왼쪽 사이드바에서 먼저 본인의 이름을 입력해주세요!")
+        st.warning("👈 왼쪽 사이드바에서 로그인/회원가입을 먼저 해주세요!")
         st.stop()
-    
+
     current_user = st.session_state["user"]["username"]
-    user_record = db.get_user(current_user)  # ID fetch needed for DB ops
-    if not user_record:
-        st.error("사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.")
-        st.stop()
-    
-    user_id = user_record[0]
+    user_id = st.session_state["user"]["user_id"]
 
     # --- Status Setting ---
     st.subheader(f"👋 {current_user}님의 오늘 상태는?")
@@ -180,7 +214,7 @@ def main():
                                 if success:
                                     st.success(f"{uname}님에게 알림을 보냈어요! 📲")
                                 else:
-                                    st.info("요청은 저장했지만, 텔레그램 알림은 못 보냈어요(상대 Chat ID 미연결).")
+                                    st.info("요청은 저장했고, 양쪽 상태는 '점약 잡는 중'으로 바뀌었어요. (텔레그램은 미연결)")
                                 st.rerun()
 
                         if disabled:
