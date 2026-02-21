@@ -318,15 +318,12 @@ def main():
             use_container_width=True,
             disabled=False,
         ):
-            # Allow hosting even if Booked (e.g., 1:1 already fixed but want to recruit more)
-            if db.get_groups_for_user_today(user_id) and my_status != "Hosting":
-                st.warning("이미 점심약속이 있는것 같아요!")
-            else:
-                # Best-effort: if already Booked, keep status Booked and just show hosting form by setting Hosting anyway.
-                if my_status != "Booked":
-                    db.update_status(user_id, "Hosting")
-                st.session_state["hosting_open"] = True
-                st.rerun()
+            # Allow hosting anytime (even if already matched/Booked). This is for extra recruiting.
+            # If already hosting, just open the form.
+            if my_status != "Booked":
+                db.update_status(user_id, "Hosting")
+            st.session_state["hosting_open"] = True
+            st.rerun()
 
     # Hosting inputs
     hosting_open = st.session_state.get("hosting_open") or (db.get_status_today(user_id) == "Hosting")
