@@ -11,7 +11,7 @@ except Exception:
 try:
     from streamlit_js_eval import streamlit_js_eval
 except Exception:
-    def streamlit_js_eval(_js: str, key: str | None = None):
+    def streamlit_js_eval(*args, **kwargs):
         return None
 
 
@@ -87,8 +87,7 @@ if "user" not in st.session_state:
     # 3) Safari-friendly fallback: localStorage
     if "user" not in st.session_state:
         emp_ls = streamlit_js_eval(
-            "ls_get_emp",
-            "localStorage.getItem('lunch_buddy_employee_id')",
+            js_expressions="localStorage.getItem('lunch_buddy_employee_id')",
             key="ls_get_emp",
         )
         if emp_ls:
@@ -125,8 +124,7 @@ def main():
                     db.delete_auth_session(token)
                 # localStorage token may exist too
                 ls_token = streamlit_js_eval(
-                    "ls_get_token",
-                    "localStorage.getItem('lunch_buddy_session_token')",
+                    js_expressions="localStorage.getItem('lunch_buddy_session_token')",
                     key="ls_get_token",
                 )
                 if ls_token:
@@ -135,8 +133,7 @@ def main():
                 cookies["employee_id"] = ""
                 cookies.save()
                 streamlit_js_eval(
-                    "ls_clear",
-                    "localStorage.removeItem('lunch_buddy_employee_id'); localStorage.removeItem('lunch_buddy_session_token');",
+                    js_expressions="localStorage.removeItem('lunch_buddy_employee_id'); localStorage.removeItem('lunch_buddy_session_token');",
                     key="ls_clear",
                 )
                 del st.session_state["user"]
@@ -168,8 +165,7 @@ def main():
                         cookies.save()
                         # Also store in localStorage (Safari-friendly)
                         streamlit_js_eval(
-                            "ls_set_login",
-                            f"localStorage.setItem('lunch_buddy_employee_id','{emp_id}'); localStorage.setItem('lunch_buddy_session_token','{token}');",
+                            js_expressions=f"localStorage.setItem('lunch_buddy_employee_id','{emp_id}'); localStorage.setItem('lunch_buddy_session_token','{token}');",
                             key="ls_set_login",
                         )
                         st.rerun()
