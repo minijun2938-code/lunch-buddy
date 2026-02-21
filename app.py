@@ -244,16 +244,49 @@ def main():
 
     st.markdown("---")
 
-    # --- Requests (Inbox/Outbox) ---
-    st.subheader("📩 오늘 받은 점심 초대")
+    # --- Requests (Inbox/Outbox/Confirmed) ---
+    def pretty_status(status: str) -> str:
+        if status == "pending":
+            return "대기중…"
+        if status == "accepted":
+            return "우리 같이 먹어요 ❤️"
+        if status == "declined":
+            return "오늘은 다음에 🙏"
+        if status == "cancelled":
+            return "취소됨"
+        return status
+
+    st.subheader("🎉 성사된 오늘의 점심")
     incoming = db.list_incoming_requests(user_id)
+    outgoing = db.list_outgoing_requests(user_id)
+    confirmed = [
+        ("incoming", *row) for row in incoming if row[3] == "accepted"
+    ] + [
+        ("outgoing", *row) for row in outgoing if row[3] == "accepted"
+    ]
+
+    if not confirmed:
+        st.caption("아직 성사된 약속이 없어요.")
+    else:
+        for direction, req_id, other_uid, other_name, status, ts in confirmed:
+            with st.container(border=True):
+                if direction == "incoming":
+                    st.write(f"**{other_name}**님과 점심 확정!")
+                else:
+                    st.write(f"**{other_name}**님과 점심 확정!")
+                st.markdown(f"**{pretty_status(status)}**")
+                st.caption(f"{ts}")
+
+    st.markdown("---")
+
+    st.subheader("📩 오늘 받은 점심 초대")
     if not incoming:
         st.caption("아직 받은 초대가 없어요.")
     else:
         for req_id, from_uid, from_name, status, ts in incoming:
             with st.container(border=True):
                 st.write(f"**{from_name}** → 나")
-                st.caption(f"상태: {status} · {ts}")
+                st.caption(f"상태: {pretty_status(status)} · {ts}")
 
                 if status == "pending":
                     c1, c2 = st.columns(2)
@@ -266,12 +299,11 @@ def main():
                             if ok_add:
                                 st.toast("현재 멤버에 추가했어요! (남은 자리 -1)")
 
-                            # Optional: notify sender
                             sender = db.get_user_by_id(from_uid)
                             if sender and sender[2]:
                                 bot.send_telegram_msg(sender[2], f"✅ [Lunch Buddy] {current_user}님이 점심 초대를 수락했어요.")
 
-                            st.success("수락 완료")
+                            st.success("우리 같이 먹어요 ❤️")
                             st.rerun()
                     with c2:
                         if st.button("❌ 거절", key=f"dec_{req_id}", use_container_width=True):
@@ -279,18 +311,18 @@ def main():
                             sender = db.get_user_by_id(from_uid)
                             if sender and sender[2]:
                                 bot.send_telegram_msg(sender[2], f"❌ [Lunch Buddy] {current_user}님이 오늘은 어렵다고 했어요.")
-                            st.info("거절 처리됨")
+                            st.info("오늘은 다음에 🙏")
                             st.rerun()
 
     st.subheader("📤 오늘 내가 보낸 초대")
-    outgoing = db.list_outgoing_requests(user_id)
     if not outgoing:
         st.caption("아직 보낸 초대가 없어요.")
     else:
         for req_id, to_uid, to_name, status, ts in outgoing:
             with st.container(border=True):
                 st.write(f"나 → **{to_name}**")
-                st.caption(f"상태: {status} · {ts}")
+                st.caption(f"상태: {pretty_status(status)} · {ts}")
+
                 if status == "pending":
                     if st.button("취소", key=f"cancel_{req_id}"):
                         db.cancel_request(req_id)
