@@ -231,10 +231,10 @@ def main():
             # --- My status ---
             st.subheader("🙋 내 현황")
             my_status = db.get_status_today(user_id)
-        
+
             if my_status == "Booked":
                 st.markdown("## 점약 있어요 🎉")
-        
+
                 # Always show detail + chat (no toggle)
                 if st.button("🚫 점약 취소하기", type="primary"):
                     ok, err = db.cancel_booking_for_user(user_id)
@@ -253,13 +253,13 @@ def main():
                     "Not Set": "(미정)",
                 }.get(my_status, my_status)
                 st.info(f"현재 내 상태: **{status_text}**")
-        
+
             # Show who/what (always when Booked)
             show_detail = True
-        
+
             if show_detail:
                 my_groups_today = db.get_groups_for_user_today(user_id)
-        
+
                 # If status is Booked but membership rows are missing (legacy), recover from accepted group request
                 if (not my_groups_today) and my_status == "Booked":
                     host_id = db.get_latest_accepted_group_host_today(user_id)
@@ -269,7 +269,7 @@ def main():
                         except Exception:
                             pass
                         my_groups_today = db.get_groups_for_user_today(user_id)
-        
+
                 if my_groups_today:
                     gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
                     st.markdown("**오늘 점약 상세**" if my_status == "Booked" else "**오늘 같이 먹는 멤버**")
@@ -284,19 +284,19 @@ def main():
                             db.update_group_menu_payer(host_uid, today_str, new_menu.strip(), new_payer or None)
                             st.success("저장 완료")
                             st.rerun()
-        
+
                     st.markdown(f"**메뉴:** {menu or '-'}")
                     if payer_name:
                         st.markdown(f"**내가쏜다:** {payer_name} 💳")
                     st.caption(f"호스트: {db.get_display_name(host_uid)}")
-        
+
                     # --- Members-only chat ---
                     with st.expander("💬 멤버 채팅 (메뉴/시간 정하기)", expanded=True):
                         realtime = st.toggle("실시간 업데이트(3초)", value=True, key=f"rt_{host_uid}")
                         if realtime:
                             # rerun without full page refresh; keeps widget/session state
                             st_autorefresh(interval=3000, key=f"chat_refresh_{host_uid}")
-        
+
                         chat_rows = db.list_group_chat(host_uid, today_str, limit=200)
                         if not chat_rows:
                             st.caption("아직 대화가 없어요.")
@@ -311,7 +311,7 @@ def main():
                                     f"<div class='lb-chat-msg'>{_html.escape(str(msg))}</div>"
                                     f"</div>"
                                 )
-        
+
                             chat_html = f"""
         <div id='lb-chat-box' style='height:280px; overflow-y:auto; border:1px solid rgba(49,51,63,0.18); border-radius:8px;'>
           {''.join(items)}
@@ -327,7 +327,7 @@ def main():
         </script>
         """
                             st.components.v1.html(chat_html, height=300)
-        
+
                         text = st.chat_input("메시지 입력…")
                         if text:
                             ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), text, today_str)
@@ -341,7 +341,7 @@ def main():
                         if d:
                             _req_id, other_id, other_name, ts = d
                             db.ensure_1to1_group_today(user_id, int(other_id))
-        
+
                             # re-fetch as group
                             my_groups_today = db.get_groups_for_user_today(user_id)
                             if my_groups_today:
@@ -360,15 +360,15 @@ def main():
                                 st.caption(f"시간: {ts}")
                         else:
                             st.caption("(아직 매칭된 점약 정보를 찾지 못했어요. 새로고침 후 다시 시도해줘)")
-        
+
             # --- Status buttons ---
 
             st.subheader("👋 오늘 상태는?")
             c1, c2, c3 = st.columns(3)
-        
+
             if my_status == "Booked":
                 st.caption("⚠️ 이미 점심약속이 있는것 같아요! (오늘은 변경/요청이 제한돼요)")
-        
+
             with c1:
                 role = st.session_state["user"].get("role")
                 # Sender lock: if I have a pending outgoing invite, I shouldn't set myself to Free.
@@ -384,7 +384,7 @@ def main():
                     st.caption("(팀장/임원은 '불러주세요'를 사용할 수 없어요)")
                 if db.get_status_today(user_id) == "Planning":
                     st.caption("(초대 보낸 상태라서, 초대 철회 전까지는 '불러주세요'로 바꿀 수 없어요)")
-        
+
             with c2:
                 if st.button(
                     "🙅 오늘은 넘어갈게요 (미참여)",
@@ -393,42 +393,45 @@ def main():
                 ):
                     db.update_status(user_id, "Skip")
                     st.rerun()
-        
+
             with c3:
                 if st.button(
                     "🧑‍🍳 오늘 점심 같이 드실분?",
                     use_container_width=True,
                     disabled=False,
                 ):
-                    # Allow hosting anytime (even if already matched/Booked). This is for extra recruiting.
-                    # If already hosting, just open the form.
-                    if my_status != "Booked":
+                    # Toggle hosting form open/close
+                    currently_open = bool(st.session_state.get("hosting_open", False))
+                    st.session_state["hosting_open"] = not currently_open
+
+                    # If opening, ensure status is Hosting (unless Booked)
+                    if (not currently_open) and my_status != "Booked":
                         db.update_status(user_id, "Hosting")
-                    st.session_state["hosting_open"] = True
+
                     st.rerun()
-        
-            # Hosting inputs
-            hosting_open = st.session_state.get("hosting_open") or (db.get_status_today(user_id) == "Hosting")
+
+            # Hosting inputs (open only when user toggles it)
+            hosting_open = bool(st.session_state.get("hosting_open", False))
             if hosting_open:
                 st.markdown("### 🧑‍🍳 합류 모집 정보")
-        
+
                 # Autofill current members: me + (if 1:1 booked) partner(s)
                 partners = db.get_accepted_partners_today(user_id)
                 default_members = ", ".join([current_user] + [name for _uid, name in partners])
-        
+
                 with st.form("hosting_form"):
                     member_names = st.text_input("현재 멤버(이름)", value=default_members, key=f"host_members_{user_id}")
                     seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1, key=f"host_seats_{user_id}")
                     menu = st.text_input("메뉴", key=f"host_menu_{user_id}")
-        
+
                     st.caption("(선택) 내가쏜다!")
                     payer_name = st.text_input("누가 쏘나요? (이름 입력)", value="", key=f"host_payer_{user_id}")
                     payer_name = (payer_name or "").strip()
                     if not payer_name:
                         payer_name = None
-        
+
                     submitted = st.form_submit_button("저장")
-        
+
                 if submitted:
                     db.upsert_group(user_id, member_names.strip(), int(seats_left), menu.strip(), payer_name=payer_name)
                     # Ensure partner user_ids are in normalized group_members without consuming seats
@@ -440,9 +443,9 @@ def main():
                     except Exception:
                         pass
                     st.success("저장 완료!")
-        
+
             st.markdown("---")
-        
+
 
     # --- Requests (moved to My tab) ---
             def pretty_status(status: str) -> str:
@@ -458,11 +461,11 @@ def main():
 
             incoming = db.list_incoming_requests(user_id)
             outgoing = db.list_outgoing_requests(user_id)
-        
+
             confirmed = [r for r in incoming if r[3] == "accepted"] + [r for r in outgoing if r[3] == "accepted"]
             st.subheader("📊 오늘 점심 성사")
             st.metric("성사 건수", len(confirmed))
-        
+
             st.subheader("📩 오늘 받은 점심 초대")
             if not incoming:
                 st.caption("아직 받은 초대가 없어요.")
@@ -479,9 +482,9 @@ def main():
                                 st.caption(f"초대 팀: {host_disp} | 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}{extra}")
                         else:
                             st.write(f"**{from_name}** → 나")
-        
+
                         st.caption(f"상태: {pretty_status(status)} · {ts}")
-        
+
                         if status == "pending":
                             # Accept should be possible even if I'm Booked when I'm the host receiving join requests
                             is_join_to_my_group = bool(group_host_user_id) and int(group_host_user_id) == int(user_id)
@@ -490,7 +493,7 @@ def main():
                             with a:
                                 if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True, disabled=accept_disabled):
                                     db.update_request_status(req_id, "accepted")
-        
+
                                     if group_host_user_id:
                                         host_id = int(group_host_user_id)
                                         # Two cases:
@@ -502,7 +505,7 @@ def main():
                                         else:
                                             target_uid = int(user_id)
                                             target_name = current_user
-        
+
                                         ok_add, err_add = db.accept_group_join(host_id, target_uid, target_name)
                                         if ok_add:
                                             db.set_booked_for_group(host_id)
@@ -513,7 +516,7 @@ def main():
                                         # Keep both as Booked, and allow multiple accepts to form a natural group.
                                         db.update_status(user_id, "Booked")
                                         db.update_status(from_uid, "Booked")
-        
+
                                         # If I already have a group today, add the other into that group.
                                         my_groups = db.get_groups_for_user_today(user_id)
                                         if my_groups:
@@ -525,21 +528,21 @@ def main():
                                             db.clear_group_chat(int(user_id), today_str)
                                             db.ensure_fixed_group_today(int(user_id))
                                             db.add_member_fixed_group(int(user_id), int(from_uid), from_name)
-        
+
                                         # (optional) also ensure legacy 1:1 group exists for detail compatibility
                                         db.ensure_1to1_group_today(user_id, from_uid)
-        
+
                                     sender = db.get_user_by_id(from_uid)
                                     if sender and sender[2]:
                                         bot.send_telegram_msg(sender[2], f"✅ [Lunch Buddy] {current_user}님이 점심 초대를 수락했어요.")
-        
+
                                     st.success("🍚👏 우리 같이 먹어요")
                                     st.rerun()
                             with b:
                                 if st.button("❌ 거절", key=f"dec_{req_id}", use_container_width=True):
                                     db.update_request_status(req_id, "declined")
                                     st.rerun()
-        
+
             st.subheader("📤 오늘 내가 보낸 초대")
             if not outgoing:
                 st.caption("아직 보낸 초대가 없어요.")
@@ -550,11 +553,11 @@ def main():
                     if to_uid in seen:
                         continue
                     seen.add(to_uid)
-        
+
                     with st.container(border=True):
                         st.write(f"나 → **{to_name}**")
                         st.caption(f"상태: {pretty_status(status)} · {ts}")
-        
+
                         # 철회 버튼은 'pending'일 때 항상 노출
                         if status == "pending":
                             if st.button("초대 철회", key=f"cancel_{req_id}"):
@@ -563,15 +566,15 @@ def main():
                                 if (db.get_status_today(user_id) == "Planning") and (not db.has_pending_outgoing_today(user_id)):
                                     db.clear_status_today(user_id)
                                 st.rerun()
-        
+
             st.markdown("---")
     with tab_board:
             # --- Dashboard ---
             st.subheader("👀 동료들의 점심 현황")
-        
+
             all_statuses = db.get_all_statuses()
             others = [s for s in all_statuses if s[0] != user_id]
-        
+
             st.markdown("### 🧑‍🍳 오늘 점심 같이 드실분?")
             groups = db.get_groups_today()
             joinable = [g for g in groups if g[4] is None or int(g[4]) > 0]
@@ -586,7 +589,7 @@ def main():
                         st.write(f"**메뉴:** {menu or '-'}")
                         if payer_name:
                             st.write(f"**내가쏜다:** {payer_name} 💳")
-        
+
                         if host_uid != user_id:
                             if st.button("🙋 저요!저요!", key=f"join_{gid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
                                 req_id, err = db.create_request(user_id, host_uid, group_host_user_id=host_uid)
@@ -595,13 +598,13 @@ def main():
                                 else:
                                     st.success("요청 보냈어요! (수락되면 멤버에 추가돼요)")
                                 st.rerun()
-        
+
             st.markdown("---")
-        
+
             st.markdown("### 🟢 점약 없어요 불러주세요")
-        
+
             host_group = db.get_group_by_host_today(user_id)
-        
+
             # include me too, so I can confirm my status is visible
             free_people = [s for s in all_statuses if s[2] == "Free"]
             if not free_people:
@@ -615,10 +618,10 @@ def main():
                             # uname here is not guaranteed to include english_name; recompute for consistency
                             disp = db.get_display_name(uid)
                             st.markdown(f"### {disp}" + (" (나)" if is_me else ""))
-        
+
                             if is_me:
                                 st.caption("✅ 내가 '불러주세요'로 잘 표시되는지 확인용")
-        
+
                             # 1) If I'm hosting an existing group, invite them to my group
                             if host_group and not is_me:
                                 _gid, _d, _host_uid, _host_name, member_names, seats_left, menu, payer_name = host_group
@@ -632,7 +635,7 @@ def main():
                                         st.success("그룹 초대 보냈어요!")
                                 extra = f" | 내가쏜다: {payer_name} 💳" if payer_name else ""
                                 st.caption(f"(내 모임) 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}{extra}")
-        
+
                             # 2) Regular 1:1 invite
                             if not is_me:
                                 if st.button("🍚 밥 먹자고 찌르기!", key=f"req_{uid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
@@ -642,7 +645,7 @@ def main():
                                     else:
                                         st.success("요청 보냈어요!")
                                     st.rerun()
-        
+
             st.markdown("---")
             st.markdown("### 🙅 미참여")
             skip_people = [o for o in others if o[2] == "Skip"]
@@ -655,7 +658,7 @@ def main():
                         with st.container(border=True):
                             st.markdown(f"### {uname}")
                             st.write("상태: 오늘은 넘어갈게요 (미참여)")
-        
-        
+
+
 if __name__ == "__main__":
     main()
