@@ -12,6 +12,8 @@ today = datetime.date.today()
 today_str = today.isoformat()
 today_kor = f"{today.month}월 {today.day}일"
 
+APP_VERSION = "2026-02-21.13"
+
 st.set_page_config(page_title=f"Lunch Buddy 🍱 ({today_str})", layout="wide")
 
 
@@ -70,6 +72,7 @@ def main():
 
     # --- Auth (sidebar) ---
     with st.sidebar:
+        st.caption(f"ver {APP_VERSION}")
         st.header("🔐 회원가입 / 로그인")
 
         if "user" in st.session_state:
