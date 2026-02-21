@@ -870,7 +870,26 @@ def delete_auth_session(token: str):
     conn.commit()
     conn.close()
 
+def _has_host_group_today(user_id: int) -> bool:
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT 1 FROM lunch_groups WHERE date=? AND host_user_id=? LIMIT 1",
+        (today, user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    return bool(row)
+
+
 def get_all_statuses():
+    """Return all users + computed-safe status for today.
+
+    Defensive logic to avoid stale UI:
+    - If stored status is Booked but there is no accepted request today → treat as Not Set.
+    - If stored status is Hosting but there is no lunch_groups row today → treat as Not Set.
+    """
     today = datetime.date.today().isoformat()
     conn = get_connection()
     c = conn.cursor()
@@ -884,7 +903,15 @@ def get_all_statuses():
     )
     results = c.fetchall()
     conn.close()
-    return results
+
+    fixed = []
+    for user_id, username, status, chat_id in results:
+        if status == "Booked" and not has_accepted_today(int(user_id)):
+            status = "Not Set"
+        if status == "Hosting" and not _has_host_group_today(int(user_id)):
+            status = "Not Set"
+        fixed.append((user_id, username, status, chat_id))
+    return fixed
 
 
 def get_status_today(user_id: int) -> str:

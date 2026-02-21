@@ -152,6 +152,10 @@ def main():
     # Priority: accepted -> Booked
     db.reconcile_user_today(user_id)
 
+    # Defensive cleanup: if status says Hosting but group row is missing, show (미정)
+    if db.get_status_today(user_id) == "Hosting" and not db.get_group_by_host_today(user_id):
+        db.clear_status_today(user_id)
+
     # --- My status ---
     st.subheader("🙋 내 현황")
     my_status = db.get_status_today(user_id)
