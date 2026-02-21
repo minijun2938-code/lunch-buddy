@@ -1273,7 +1273,7 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     Returns: (request_id, error_message)
     """
     # one-lunch rule
-    if get_status_today(from_user_id) == "Booked":
+    if get_status_today(from_user_id) in ("Booked", "Planning"):
         return None, "이미 점심약속이 있는것 같아요!"
 
     # Allow inviting a Booked host ONLY when it's a join request to that host's group.
@@ -1306,8 +1306,10 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     finally:
         conn.close()
 
-    # Do NOT change statuses on pending.
-    # Users should remain visible as Free until an invite is accepted.
+    # Pending request behavior:
+    # - Sender becomes Planning (prevent spamming/duplicate actions)
+    # - Receiver stays as-is (so they remain Free/Not Set until they accept)
+    set_planning(from_user_id)
     return req_id, None
 
 
