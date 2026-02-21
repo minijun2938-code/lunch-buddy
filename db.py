@@ -947,7 +947,7 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     # If user is in a group, use that as source of truth.
     groups = get_groups_for_user_on_date(user_id, today)
     if groups:
-        _gid, _date, host_uid, _host_name, _member_names, _seats_left, _menu = groups[0]
+        _gid, _date, host_uid, _host_name, _member_names, _seats_left, _menu, _payer_name = groups[0]
         members = list_group_members(host_uid, today)
         member_ids = [uid for uid, _n in members]
 
