@@ -117,14 +117,33 @@ def init_db():
                   UNIQUE(date, host_user_id))'''
     )
 
-    # Migration: add member_user_ids if missing
+    # Migration: add member_user_ids if missing (legacy)
     c.execute("PRAGMA table_info(lunch_groups)")
     gcols = {row[1] for row in c.fetchall()}
     if "member_user_ids" not in gcols:
         c.execute("ALTER TABLE lunch_groups ADD COLUMN member_user_ids TEXT")
+
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_groups_day
            ON lunch_groups(date)"""
+    )
+
+    # Normalized group members (new)
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS group_members
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  date TEXT,
+                  host_user_id INTEGER,
+                  user_id INTEGER,
+                  UNIQUE(date, host_user_id, user_id))'''
+    )
+    c.execute(
+        """CREATE INDEX IF NOT EXISTS idx_group_members_day_host
+           ON group_members(date, host_user_id)"""
+    )
+    c.execute(
+        """CREATE INDEX IF NOT EXISTS idx_group_members_day_user
+           ON group_members(date, user_id)"""
     )
 
     # Auth sessions (remember login across refresh)
@@ -146,10 +165,17 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   from_user_id INTEGER,
                   to_user_id INTEGER,
+                  group_host_user_id INTEGER,
                   date TEXT,
                   status TEXT,
                   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
     )
+
+    # Migration: add group_host_user_id if missing
+    c.execute("PRAGMA table_info(requests)")
+    rcols = {row[1] for row in c.fetchall()}
+    if "group_host_user_id" not in rcols:
+        c.execute("ALTER TABLE requests ADD COLUMN group_host_user_id INTEGER")
 
     # Prevent duplicate "pending" requests between same pair on same date.
     c.execute(
@@ -218,21 +244,37 @@ def register_user(
         conn.close()
 
 
-def verify_login(employee_id: str, pin: str) -> tuple[bool, tuple | None]:
-    """Returns (ok, user_row)."""
+def get_or_create_user_simple(*, employee_id: str, username: str) -> tuple[bool, tuple | None, str | None]:
+    """MVP: no password. Identify user by employee_id (unique) + display name."""
     employee_id = (employee_id or "").strip().lower()
+    username = (username or "").strip()
+    import re
+
+    if not re.fullmatch(r"[a-z]{2}\d{5}", employee_id):
+        return False, None, "사번은 영문자 2개 + 숫자 5개 형식이어야 합니다. (예: sl55555)"
+    if not username:
+        return False, None, "이름을 입력해주세요."
+
     user = get_user_by_employee_id(employee_id)
-    if not user:
-        return False, None
+    if user:
+        return True, user, None
 
-    user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, salt, pin_hash = user
-    if not (pin.isdigit() and len(pin) == 4):
-        return False, None
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "INSERT INTO users (username, employee_id) VALUES (?, ?)",
+            (username, employee_id),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        user = get_user_by_employee_id(employee_id)
+        return (True, user, None) if user else (False, None, "가입 실패")
+    finally:
+        conn.close()
 
-    if _hash_pin(emp_id or employee_id, pin, salt or "") != (pin_hash or ""):
-        return False, None
-
-    return True, user
+    user = get_user_by_employee_id(employee_id)
+    return True, user, None
 
 
 def update_user_chat_id(user_id, chat_id):
@@ -305,23 +347,16 @@ def delete_group(host_user_id: int):
 def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: str):
     """Upsert today's hosting group.
 
-    Ensures host_user_id is included in member_user_ids.
+    Ensures host is registered as a member in group_members.
     """
     today = datetime.date.today().isoformat()
 
-    # Ensure host is included in member_user_ids
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "SELECT member_user_ids FROM lunch_groups WHERE date=? AND host_user_id=?",
-        (today, host_user_id),
-    )
-    row = c.fetchone()
-    existing_ids = row[0] if row else None
-    ids = [x.strip() for x in (existing_ids or "").split(",") if x.strip()]
-    if str(host_user_id) not in ids:
-        ids.insert(0, str(host_user_id))
-    member_user_ids = ",".join(ids)
+
+    # Keep legacy CSV fields for display
+    member_names = member_names or ""
+    member_user_ids = str(host_user_id)
 
     c.execute(
         """
@@ -330,6 +365,16 @@ def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: st
         """,
         (today, host_user_id, today, host_user_id, member_names, member_user_ids, int(seats_left), menu),
     )
+
+    # Ensure host is in normalized members
+    try:
+        c.execute(
+            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+            (today, host_user_id, host_user_id),
+        )
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -356,7 +401,10 @@ def get_groups_today():
 
 
 def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
-    """Append member (id+name) to today's host group and decrement seats_left if possible."""
+    """Append member to today's host group and decrement seats_left (atomic-ish).
+
+    Uses normalized group_members + keeps legacy CSV fields in sync for display.
+    """
     today = datetime.date.today().isoformat()
     member_name = (member_name or "").strip()
     if not member_name:
@@ -365,6 +413,7 @@ def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str
     conn = get_connection()
     c = conn.cursor()
     try:
+        # Ensure group exists
         c.execute(
             "SELECT member_names, member_user_ids, seats_left FROM lunch_groups WHERE date=? AND host_user_id=?",
             (today, host_user_id),
@@ -376,24 +425,48 @@ def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str
         member_names, member_user_ids, seats_left = row
         seats_left = int(seats_left) if seats_left is not None else 0
 
-        ids = [x.strip() for x in (member_user_ids or "").split(",") if x.strip()]
-        if str(member_user_id) in ids:
+        # Already member?
+        c.execute(
+            "SELECT 1 FROM group_members WHERE date=? AND host_user_id=? AND user_id=?",
+            (today, host_user_id, member_user_id),
+        )
+        if c.fetchone():
             return True, None
 
         if seats_left <= 0:
             return False, "남은 자리가 없어요."
 
+        # Insert membership
+        try:
+            c.execute(
+                "INSERT INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+                (today, host_user_id, member_user_id),
+            )
+        except sqlite3.IntegrityError:
+            return True, None
+
+        # Decrement seats
+        c.execute(
+            "UPDATE lunch_groups SET seats_left = seats_left - 1 WHERE date=? AND host_user_id=? AND seats_left > 0",
+            (today, host_user_id),
+        )
+        if c.rowcount == 0:
+            return False, "남은 자리가 없어요."
+
+        # Sync legacy display fields
+        ids = [x.strip() for x in (member_user_ids or "").split(",") if x.strip()]
         names = [n.strip() for n in (member_names or "").split(",") if n.strip()]
-        names.append(member_name)
-        ids.append(str(member_user_id))
+        if str(member_user_id) not in ids:
+            ids.append(str(member_user_id))
+            names.append(member_name)
 
         new_member_names = ", ".join(names)
         new_member_user_ids = ",".join(ids)
-
         c.execute(
-            "UPDATE lunch_groups SET member_names=?, member_user_ids=?, seats_left=? WHERE date=? AND host_user_id=?",
-            (new_member_names, new_member_user_ids, seats_left - 1, today, host_user_id),
+            "UPDATE lunch_groups SET member_names=?, member_user_ids=? WHERE date=? AND host_user_id=?",
+            (new_member_names, new_member_user_ids, today, host_user_id),
         )
+
         conn.commit()
         return True, None
     finally:
@@ -405,46 +478,35 @@ def set_booked_for_group(host_user_id: int):
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT member_user_ids FROM lunch_groups WHERE date=? AND host_user_id=?",
+        "SELECT user_id FROM group_members WHERE date=? AND host_user_id=?",
         (today, host_user_id),
     )
-    row = c.fetchone()
+    ids = [r[0] for r in c.fetchall()]
     conn.close()
-    if not row:
-        return
 
-    ids = [x.strip() for x in (row[0] or "").split(",") if x.strip()]
     for uid in ids:
         try:
-            uid_i = int(uid)
-            update_status(uid_i, "Booked")
-            cancel_pending_requests_for_user(uid_i)
+            update_status(int(uid), "Booked")
+            cancel_pending_requests_for_user(int(uid))
         except Exception:
             continue
 
 
 def get_groups_for_user_today(user_id: int):
-    """Groups where user_id is a member (based on member_user_ids)."""
+    """Groups where user_id is a member (normalized group_members)."""
     today = datetime.date.today().isoformat()
     conn = get_connection()
     c = conn.cursor()
-    like1 = f"{user_id},%"
-    like2 = f"%,{user_id},%"
-    like3 = f"%,{user_id}"
     c.execute(
         """
         SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
-        FROM lunch_groups g
+        FROM group_members gm
+        JOIN lunch_groups g ON g.date = gm.date AND g.host_user_id = gm.host_user_id
         JOIN users u ON u.user_id = g.host_user_id
-        WHERE g.date=? AND (
-            g.member_user_ids = ? OR
-            g.member_user_ids LIKE ? OR
-            g.member_user_ids LIKE ? OR
-            g.member_user_ids LIKE ?
-        )
+        WHERE gm.date=? AND gm.user_id=?
         ORDER BY g.id DESC
         """,
-        (today, str(user_id), like1, like2, like3),
+        (today, user_id),
     )
     rows = c.fetchall()
     conn.close()
@@ -514,7 +576,7 @@ def get_status_today(user_id: int) -> str:
     conn.close()
     return row[0] if row else "Not Set"
 
-def create_request(from_user_id, to_user_id):
+def create_request(from_user_id, to_user_id, group_host_user_id: int | None = None):
     """Create a lunch invite request for today.
 
     Rules:
@@ -531,8 +593,8 @@ def create_request(from_user_id, to_user_id):
     c = conn.cursor()
     try:
         c.execute(
-            "INSERT INTO requests (from_user_id, to_user_id, date, status) VALUES (?, ?, ?, 'pending')",
-            (from_user_id, to_user_id, today),
+            "INSERT INTO requests (from_user_id, to_user_id, group_host_user_id, date, status) VALUES (?, ?, ?, ?, 'pending')",
+            (from_user_id, to_user_id, group_host_user_id, today),
         )
         conn.commit()
         req_id = c.lastrowid
@@ -600,7 +662,7 @@ def list_incoming_requests(user_id):
     c = conn.cursor()
     c.execute(
         """
-        SELECT r.id, r.from_user_id, u.username, r.status, r.timestamp
+        SELECT r.id, r.from_user_id, u.username, r.status, r.timestamp, r.group_host_user_id
         FROM requests r
         JOIN users u ON u.user_id = r.from_user_id
         WHERE r.date=? AND r.to_user_id=?
@@ -619,7 +681,7 @@ def list_outgoing_requests(user_id):
     c = conn.cursor()
     c.execute(
         """
-        SELECT r.id, r.to_user_id, u.username, r.status, r.timestamp
+        SELECT r.id, r.to_user_id, u.username, r.status, r.timestamp, r.group_host_user_id
         FROM requests r
         JOIN users u ON u.user_id = r.to_user_id
         WHERE r.date=? AND r.from_user_id=?

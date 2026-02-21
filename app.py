@@ -1,244 +1,98 @@
 import streamlit as st
-import datetime
 import db
 import bot
-# Optional deps: keep the app running even if Streamlit Cloud install hiccups.
-try:
-    from streamlit_cookies_manager import EncryptedCookieManager
-except Exception:
-    EncryptedCookieManager = None
-
-try:
-    from streamlit_js_eval import streamlit_js_eval
-except Exception:
-    def streamlit_js_eval(*args, **kwargs):
-        return None
-
-
-class _NoopCookies(dict):
-    def ready(self):
-        return True
-
-    def save(self):
-        return None
-
-
-def get_cookie_manager():
-    if EncryptedCookieManager is None:
-        return _NoopCookies()
-
-    password = None
-    try:
-        password = st.secrets.get("COOKIE_PASSWORD")
-    except Exception:
-        password = None
-
-    if not password:
-        password = "lunch-buddy-dev-cookie-password"
-
-    cookies = EncryptedCookieManager(prefix="lunch_buddy_", password=password)
-    if not cookies.ready():
-        st.stop()
-    return cookies
 
 # Initialize DB on first run
+# (Streamlit Cloud may reset local filesystem; treat this as MVP)
 db.init_db()
 
-# Cookies (persist login)
-cookies = get_cookie_manager()
-
-# Auto-login (Safari note): storage inside component iframes can be blocked.
-# So we use a cascade: URL token -> cookie token -> cookie employee_id.
-if "user" not in st.session_state:
-    # 0) URL token (survives refresh reliably across browsers)
-    try:
-        url_token = st.query_params.get("t")
-    except Exception:
-        url_token = None
-
-    if url_token:
-        row = db.get_user_by_session_token(str(url_token))
-        if row:
-            user_id, username, telegram_chat_id, team, mbti, age, years, emp_id = row
-            st.session_state["user"] = {
-                "user_id": user_id,
-                "username": username,
-                "employee_id": emp_id,
-                "team": team,
-                "mbti": mbti,
-                "age": age,
-                "years": years,
-                "telegram_chat_id": telegram_chat_id,
-            }
-
-if "user" not in st.session_state:
-    # 1) Cookie session token
-    token = cookies.get("session_token")
-    if token:
-        row = db.get_user_by_session_token(str(token))
-        if row:
-            user_id, username, telegram_chat_id, team, mbti, age, years, emp_id = row
-            st.session_state["user"] = {
-                "user_id": user_id,
-                "username": username,
-                "employee_id": emp_id,
-                "team": team,
-                "mbti": mbti,
-                "age": age,
-                "years": years,
-                "telegram_chat_id": telegram_chat_id,
-            }
-
-if "user" not in st.session_state:
-    # 2) Cookie employee_id
-    emp = cookies.get("employee_id")
-    if emp:
-        u = db.get_user_by_employee_id(str(emp).strip().lower())
-        if u:
-            user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
-            st.session_state["user"] = {
-                "user_id": user_id,
-                "username": username,
-                "employee_id": emp_id,
-                "team": team,
-                "mbti": mbti,
-                "age": age,
-                "years": years,
-                "telegram_chat_id": telegram_chat_id,
-            }
-
 st.set_page_config(page_title="Lunch Buddy 🍱", layout="wide")
+
+
+def _load_user_from_query():
+    emp = st.query_params.get("emp")
+    if not emp:
+        return
+    u = db.get_user_by_employee_id(str(emp).strip().lower())
+    if not u:
+        return
+    user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
+    st.session_state["user"] = {
+        "user_id": user_id,
+        "username": username,
+        "employee_id": emp_id,
+        "telegram_chat_id": telegram_chat_id,
+    }
+
+
+if "user" not in st.session_state:
+    _load_user_from_query()
+
 
 def main():
     st.title("🍱 Lunch Buddy: 오늘 점심 뭐 먹지?")
     st.markdown("---")
 
-    # --- Auth (Sidebar) ---
+    # --- MVP Entrance (Sidebar) ---
     with st.sidebar:
-        st.header("🔐 로그인")
+        st.header("👤 입장")
 
         if "user" in st.session_state:
-            st.success(f"로그인됨: {st.session_state['user']['username']}")
-            if st.button("로그아웃"):
-                # clear cookie + db session
-                token = cookies.get("session_token")
-                if token:
-                    db.delete_auth_session(token)
-                cookies["session_token"] = ""
-                cookies["employee_id"] = ""
-                cookies.save()
-
-                try:
-                    st.query_params.clear()
-                except Exception:
-                    pass
-
+            st.success(f"입장됨: {st.session_state['user']['username']} ({st.session_state['user']['employee_id']})")
+            if st.button("나가기"):
+                st.query_params.clear()
                 del st.session_state["user"]
                 st.rerun()
         else:
-            tab_login, tab_signup = st.tabs(["로그인", "회원가입"])
+            emp = st.text_input("사번 (예: sl55555)")
+            name = st.text_input("이름")
+            if st.button("입장하기", use_container_width=True):
+                ok, user, err = db.get_or_create_user_simple(employee_id=emp, username=name)
+                if not ok:
+                    st.error(err or "입장 실패")
+                else:
+                    user_id, username, telegram_chat_id, *_rest = user
+                    st.session_state["user"] = {
+                        "user_id": user_id,
+                        "username": username,
+                        "employee_id": emp.strip().lower(),
+                        "telegram_chat_id": telegram_chat_id,
+                    }
+                    # Persist across refresh via URL param (Safari-safe)
+                    st.query_params["emp"] = emp.strip().lower()
+                    st.rerun()
 
-            with tab_login:
-                employee_id = st.text_input("사번 (예: sl55555)", key="login_employee_id")
-                pin = st.text_input("비밀번호(PIN, 4자리)", type="password", key="login_pin")
-
-                if st.button("로그인", use_container_width=True):
-                    ok, user = db.verify_login(employee_id.strip(), pin.strip())
-                    if ok:
-                        user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = user
-                        st.session_state["user"] = {
-                            "user_id": user_id,
-                            "username": username,
-                            "employee_id": emp_id,
-                            "team": team,
-                            "mbti": mbti,
-                            "age": age,
-                            "years": years,
-                            "telegram_chat_id": telegram_chat_id,
-                        }
-                        token = db.create_auth_session(user_id)
-
-                        # Persist: URL param (works well in Safari) + cookie best-effort
-                        try:
-                            st.query_params["t"] = token
-                        except Exception:
-                            pass
-
-                        cookies["session_token"] = token
-                        cookies["employee_id"] = emp_id
-                        cookies.save()
-
-                        st.rerun()
-                    else:
-                        st.error("사번 또는 비밀번호가 올바르지 않습니다.")
-
-            with tab_signup:
-                st.caption("비밀번호는 숫자 4자리(PIN)로 설정합니다.")
-                su_name = st.text_input("이름", key="su_name")
-                su_team = st.text_input("팀명", key="su_team")
-                su_mbti = st.text_input("MBTI", key="su_mbti")
-                su_age = st.number_input("나이", min_value=0, max_value=120, value=30, step=1, key="su_age")
-                su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1, key="su_years")
-                su_emp = st.text_input("사번 (영문2 + 숫자5, 예: sl55555)", key="su_emp")
-                su_pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password", key="su_pin")
-                su_pin2 = st.text_input("비밀번호 확인", type="password", key="su_pin2")
-
-                if st.button("회원가입", use_container_width=True):
-                    if su_pin != su_pin2:
-                        st.error("비밀번호가 일치하지 않습니다.")
-                    else:
-                        ok, err = db.register_user(
-                            username=su_name.strip(),
-                            team=su_team.strip(),
-                            mbti=su_mbti.strip().upper(),
-                            age=int(su_age),
-                            years=int(su_years),
-                            employee_id=su_emp.strip().lower(),
-                            pin=su_pin.strip(),
-                        )
-                        if ok:
-                            st.success("회원가입 완료! 이제 로그인 해주세요.")
-                        else:
-                            st.error(err or "회원가입 실패")
-
-    # check session
     if "user" not in st.session_state:
-        st.warning("👈 왼쪽 사이드바에서 로그인/회원가입을 먼저 해주세요!")
+        st.info("왼쪽에서 사번+이름 입력하고 입장해줘.")
         st.stop()
 
-    current_user = st.session_state["user"]["username"]
     user_id = st.session_state["user"]["user_id"]
+    current_user = st.session_state["user"]["username"]
 
-    # --- Status Setting ---
-    st.subheader(f"👋 {current_user}님의 오늘 상태는?")
+    # --- Status Setting (one lunch per day rule) ---
+    st.subheader(f"👋 {current_user}님의 오늘 상태")
 
-    col1, col2 = st.columns(2)
+    my_status = db.get_status_today(user_id)
+    if my_status == "Booked":
+        st.warning("이미 점심약속이 있는것 같아요! (오늘은 상태 변경/요청이 제한돼요)")
 
-    # guard: one lunch per day
-    if db.get_status_today(user_id) == "Booked":
-        st.warning("이미 점심약속이 있는것 같아요!")
-
-    with col1:
-        if st.button("🟢 점약 없어요 불러주세요", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("🟢 점약 없어요 불러주세요", use_container_width=True, disabled=(my_status == "Booked")):
             db.update_status(user_id, "Free")
-            st.toast("상태 변경 완료: 점약 없음 🟢")
             st.rerun()
 
-    with col2:
-        if st.button("🧑‍🍳 우리쪽에 합류하실분?", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
-            # If I'm already a member of any group today, block hosting
+    with c2:
+        if st.button("🧑‍🍳 우리쪽에 합류하실분?", use_container_width=True, disabled=(my_status == "Booked")):
+            # Block if already member of any group today
             if db.get_groups_for_user_today(user_id):
                 st.warning("이미 점심약속이 있는것 같아요!")
             else:
                 db.update_status(user_id, "Hosting")
-                st.toast("상태 변경 완료: 합류 모집 중 🧑‍🍳")
                 st.rerun()
 
-    # If hosting, show extra inputs
-    my_status_row = [s for s in db.get_all_statuses() if s[0] == user_id]
-    my_status = my_status_row[0][2] if my_status_row else "Not Set"
-
-    if my_status == "Hosting":
+    # Hosting extra inputs
+    if db.get_status_today(user_id) == "Hosting":
         st.markdown("### 🧑‍🍳 합류 모집 정보")
         with st.form("hosting_form"):
             member_names = st.text_input("현재 멤버(이름)", value=current_user)
@@ -248,11 +102,11 @@ def main():
 
         if submitted:
             db.upsert_group(user_id, member_names.strip(), int(seats_left), menu.strip())
-            st.success("저장 완료! 이제 다른 사람이 '우리쪽에 합류하실분?'에서 확인할 수 있어요.")
+            st.success("저장 완료!")
 
     st.markdown("---")
 
-    # --- Requests (Inbox/Outbox/Confirmed) ---
+    # --- Requests (Inbox/Outbox/Stats) ---
     def pretty_status(status: str) -> str:
         if status == "pending":
             return "대기중…"
@@ -264,127 +118,75 @@ def main():
             return "취소됨"
         return status
 
-    # Load requests once
     incoming = db.list_incoming_requests(user_id)
     outgoing = db.list_outgoing_requests(user_id)
 
-    # Confirmed list (for current user)
-    confirmed = [
-        ("incoming", *row) for row in incoming if row[3] == "accepted"
-    ] + [
-        ("outgoing", *row) for row in outgoing if row[3] == "accepted"
-    ]
-
-    # If I'm in a group, show group members (multi-person)
-    my_groups = db.get_groups_for_user_today(user_id)
-
+    confirmed = [row for row in incoming if row[3] == "accepted"] + [row for row in outgoing if row[3] == "accepted"]
     st.subheader("📊 오늘 점심 성사")
     st.metric("성사 건수", len(confirmed))
-
-    with st.expander("성사된 오늘의 점심 보기", expanded=False):
-        if my_groups:
-            for gid, host_uid, host_name, member_names, seats_left, menu in my_groups:
-                with st.container(border=True):
-                    st.write(f"**멤버:** {member_names or '-'}")
-                    if menu:
-                        st.write(f"**메뉴:** {menu}")
-                    st.caption(f"호스트: {host_name}")
-        elif not confirmed:
-            st.caption("아직 성사된 약속이 없어요.")
-        else:
-            for direction, req_id, other_uid, other_name, status, ts in confirmed:
-                with st.container(border=True):
-                    st.write(f"**{other_name}**님과 점심 확정!")
-                    st.markdown(f"**{pretty_status(status)}**")
-                    st.caption(f"{ts}")
-
-    st.markdown("---")
 
     st.subheader("📩 오늘 받은 점심 초대")
     if not incoming:
         st.caption("아직 받은 초대가 없어요.")
     else:
-        for req_id, from_uid, from_name, status, ts in incoming:
+        for req_id, from_uid, from_name, status, ts, group_host_user_id in incoming:
             with st.container(border=True):
                 st.write(f"**{from_name}** → 나")
                 st.caption(f"상태: {pretty_status(status)} · {ts}")
 
                 if status == "pending":
-                    c1, c2 = st.columns(2)
-                    with c1:
+                    a, b = st.columns(2)
+                    with a:
                         if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True):
                             db.update_request_status(req_id, "accepted")
 
-                            sender = db.get_user_by_id(from_uid)
-
-                            # If I'm hosting today, accepting means the requester joins my group
-                            ok_add, _err_add = db.add_member_to_group(user_id, from_uid, from_name)
-                            if ok_add:
-                                st.toast("현재 멤버에 추가했어요! (남은 자리 -1)")
-                                # Everyone in this group becomes Booked
-                                db.set_booked_for_group(user_id)
+                            # If this request targets a group host, add member there.
+                            if group_host_user_id:
+                                ok_add, err_add = db.add_member_to_group(int(group_host_user_id), from_uid, from_name)
+                                if ok_add:
+                                    db.set_booked_for_group(int(group_host_user_id))
+                                else:
+                                    st.warning(err_add or "그룹 합류 처리 실패")
                             else:
-                                # Not hosting / or no group: mark both sides Booked
+                                # 1:1
                                 db.update_status(user_id, "Booked")
                                 db.update_status(from_uid, "Booked")
+                                db.cancel_pending_requests_for_user(user_id)
+                                db.cancel_pending_requests_for_user(from_uid)
 
+                            sender = db.get_user_by_id(from_uid)
                             if sender and sender[2]:
                                 bot.send_telegram_msg(sender[2], f"✅ [Lunch Buddy] {current_user}님이 점심 초대를 수락했어요.")
 
                             st.success("🍚👏 우리 같이 먹어요")
                             st.rerun()
-                    with c2:
+                    with b:
                         if st.button("❌ 거절", key=f"dec_{req_id}", use_container_width=True):
                             db.update_request_status(req_id, "declined")
-                            sender = db.get_user_by_id(from_uid)
-                            if sender and sender[2]:
-                                bot.send_telegram_msg(sender[2], f"❌ [Lunch Buddy] {current_user}님이 오늘은 어렵다고 했어요.")
-                            st.info("오늘은 다음에 🙏")
                             st.rerun()
 
     st.subheader("📤 오늘 내가 보낸 초대")
     if not outgoing:
         st.caption("아직 보낸 초대가 없어요.")
     else:
-        for req_id, to_uid, to_name, status, ts in outgoing:
+        for req_id, to_uid, to_name, status, ts, group_host_user_id in outgoing:
             with st.container(border=True):
                 st.write(f"나 → **{to_name}**")
                 st.caption(f"상태: {pretty_status(status)} · {ts}")
-
                 if status == "pending":
                     if st.button("취소", key=f"cancel_{req_id}"):
                         db.cancel_request(req_id)
-                        st.toast("요청을 취소했어요")
                         st.rerun()
 
     st.markdown("---")
 
-    # --- Dashboard (Others' Status) ---
+    # --- Dashboard ---
     st.subheader("👀 동료들의 점심 현황")
 
     all_statuses = db.get_all_statuses()
+    others = [s for s in all_statuses if s[0] != user_id]
 
-    # Filter out self
-    others = [s for s in all_statuses if s[1] != current_user]
-    myself = [s for s in all_statuses if s[1] == current_user]
-
-    # Display My Status
-    if myself:
-        my_status = myself[0][2]
-        if my_status == "Free":
-            st.info("현재 내 상태: **점약 없어요(불러주세요)** 🟢")
-        elif my_status == "Hosting":
-            st.info("현재 내 상태: **우리쪽 합류 모집 중** 🧑‍🍳")
-        elif my_status == "Planning":
-            st.info("현재 내 상태: **점약 잡는 중** 🟠")
-        elif my_status == "Booked":
-            st.info("현재 내 상태: **점약 있어요 🎉**")
-        elif my_status == "Not Set":
-            st.warning("현재 내 상태: **아직 미설정**")
-        else:
-            st.info(f"현재 내 상태: **{my_status}**")
-
-    # Section A: Groups to join
+    # Groups to join
     st.markdown("### 🧑‍🍳 우리쪽에 합류하실분?")
     groups = db.get_groups_today()
     joinable = [g for g in groups if g[4] is None or int(g[4]) > 0]
@@ -398,92 +200,50 @@ def main():
                 st.write(f"**남은 자리:** {seats_left}")
                 st.write(f"**메뉴:** {menu or '-'}")
 
-                # Join request button
                 if host_uid != user_id:
-                    existing_req = db.get_pending_request_between(user_id, host_uid)
-                    disabled = bool(existing_req and existing_req[1] == "pending")
-
-                    if st.button(
-                        "🙋 저요!저요!",
-                        key=f"join_{gid}",
-                        disabled=disabled,
-                        use_container_width=True,
-                    ):
-                        req_id, err = db.create_request(user_id, host_uid)
+                    if st.button("🙋 저요!저요!", key=f"join_{gid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
+                        req_id, err = db.create_request(user_id, host_uid, group_host_user_id=host_uid)
                         if not req_id:
                             st.warning(err or "요청 실패")
                         else:
-                            host = db.get_user_by_id(host_uid)
-                            host_chat = host[2] if host else None
-                            bot.send_telegram_msg(host_chat, f"🙋 [Lunch Buddy] {current_user}님이 '{host_name}' 팀에 합류 요청했어요! (앱에서 확인)")
                             st.success("요청 보냈어요! (수락되면 멤버에 추가돼요)")
                         st.rerun()
 
-                    if disabled:
-                        st.caption("이미 요청을 보냈어요(대기중).")
-                else:
-                    st.caption("(내가 만든 모집글)")
-
     st.markdown("---")
 
-    # Section B: Free people
+    # Free list
     st.markdown("### 🟢 점약 없어요 불러주세요")
     free_people = [o for o in others if o[2] == "Free"]
-
-    if not free_people and not joinable:
-        st.write("아직 등록된 다른 동료가 없어요.")
-    elif not free_people:
+    if not free_people:
         st.caption("지금 '불러주세요' 상태인 사람이 없어요.")
     else:
         cols = st.columns(4)
-        for i, (uid, uname, status, t_chat_id) in enumerate(free_people):
+        for i, (uid, uname, _status, _chat) in enumerate(free_people):
             with cols[i % 4]:
                 with st.container(border=True):
                     st.markdown(f"### {uname}")
-                    st.write("상태: 🟢 점약 없음 (불러주세요)")
-
-                    existing_req = db.get_pending_request_between(user_id, uid)
-                    disabled = bool(existing_req and existing_req[1] == "pending")
-
-                    if st.button(
-                        "🍚 밥 먹자고 찌르기!",
-                        key=f"req_{uid}",
-                        disabled=disabled,
-                        use_container_width=True,
-                    ):
+                    if st.button("🍚 밥 먹자고 찌르기!", key=f"req_{uid}", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
                         req_id, err = db.create_request(user_id, uid)
                         if not req_id:
                             st.warning(err or "요청 실패")
                         else:
-                            msg = (
-                                f"🍚 [Lunch Buddy] **{current_user}**님이 점심 같이 먹자고 요청했어요!\n\n"
-                                "(앱에서 수락/거절할 수 있어요)"
-                            )
-                            success = bot.send_telegram_msg(t_chat_id, msg)
-                            if success:
-                                st.success(f"{uname}님에게 알림을 보냈어요! 📲")
-                            else:
-                                st.info("요청은 저장했고, 양쪽 상태는 '점약 잡는 중'으로 바뀌었어요. (텔레그램은 미연결)")
-                            st.rerun()
-
-                    if disabled:
-                        st.caption("이미 오늘 초대를 보냈어요(대기중).")
+                            st.success("요청 보냈어요!")
+                        st.rerun()
 
     st.markdown("---")
 
-    # Section C: Booked people (accepted only)
     st.markdown("### ✅ 성사완료")
     booked_people = [o for o in others if o[2] == "Booked"]
     if not booked_people:
         st.caption("아직 성사완료된 사람이 없어요.")
     else:
-        st.caption("수락(accepted)된 경우에만 여기로 내려옵니다.")
         cols = st.columns(4)
-        for i, (uid, uname, status, _t_chat_id) in enumerate(booked_people):
+        for i, (uid, uname, _status, _chat) in enumerate(booked_people):
             with cols[i % 4]:
                 with st.container(border=True):
                     st.markdown(f"### {uname}")
                     st.write("상태: 점약 있어요 🎉")
+
 
 if __name__ == "__main__":
     main()
