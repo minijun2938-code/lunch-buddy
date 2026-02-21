@@ -436,6 +436,15 @@ def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str
         if seats_left <= 0:
             return False, "남은 자리가 없어요."
 
+        # Ensure host is in normalized members
+        try:
+            c.execute(
+                "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+                (today, host_user_id, host_user_id),
+            )
+        except Exception:
+            pass
+
         # Insert membership
         try:
             c.execute(

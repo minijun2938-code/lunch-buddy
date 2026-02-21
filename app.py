@@ -79,8 +79,6 @@ def main():
     st.subheader(f"👋 {current_user}님의 오늘 상태")
 
     my_status = db.get_status_today(user_id)
-    if my_status == "Booked":
-        st.warning("이미 점심약속이 있는것 같아요! (오늘은 상태 변경/요청이 제한돼요)")
 
     c1, c2 = st.columns(2)
     with c1:
@@ -96,6 +94,18 @@ def main():
             else:
                 db.update_status(user_id, "Hosting")
                 st.rerun()
+
+    # status line under buttons
+    status_text = {
+        "Booked": "점약 있어요 🎉",
+        "Free": "점약 없어요(불러주세요) 🟢",
+        "Hosting": "오늘 점심 같이 드실분? 모집중 🧑‍🍳",
+        "Planning": "점약 잡는 중 🟠",
+        "Not Set": "아직 미설정",
+    }.get(my_status, my_status)
+    st.caption(f"오늘 상태: {status_text}")
+    if my_status == "Booked":
+        st.caption("⚠️ 이미 점심약속이 있는것 같아요! (오늘은 변경/요청이 제한돼요)")
 
     # Hosting extra inputs
     if db.get_status_today(user_id) == "Hosting":
