@@ -113,59 +113,152 @@ def init_db():
            ON users(employee_id)"""
     )
 
-    # Daily Status table (Unique constraint on date+user_id to prevent duplicates)
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS daily_status
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  date TEXT,
-                  user_id INTEGER,
-                  status TEXT,
-                  UNIQUE(date, user_id))'''
-    )
+    # Daily Status table (meal-aware)
+    # meal: lunch | dinner
+    # kind: (dinner only) 'meal' | 'drink'
+    # We migrate legacy daily_status(date,user_id,status) -> daily_status(date,meal,user_id,status,kind)
+    c.execute("PRAGMA table_info(daily_status)")
+    ds_cols = {row[1] for row in c.fetchall()}
+    if "meal" not in ds_cols:
+        # Legacy schema → rebuild
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS daily_status_new
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      date TEXT,
+                      meal TEXT,
+                      user_id INTEGER,
+                      status TEXT,
+                      kind TEXT,
+                      UNIQUE(date, meal, user_id))'''
+        )
+        # Copy legacy rows as lunch
+        try:
+            c.execute(
+                "INSERT INTO daily_status_new(date, meal, user_id, status, kind) SELECT date, 'lunch', user_id, status, NULL FROM daily_status"
+            )
+        except Exception:
+            pass
+        try:
+            c.execute("DROP TABLE daily_status")
+        except Exception:
+            pass
+        c.execute("ALTER TABLE daily_status_new RENAME TO daily_status")
+    else:
+        # Current/partial schema: ensure kind exists
+        if "kind" not in ds_cols:
+            c.execute("ALTER TABLE daily_status ADD COLUMN kind TEXT")
+        # Ensure unique index (best-effort; table already has constraint)
+        c.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_status_unique
+               ON daily_status(date, meal, user_id)"""
+        )
 
-    # Hosting groups ("우리쪽에 합류하실분?")
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS lunch_groups
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  date TEXT,
-                  host_user_id INTEGER,
-                  member_names TEXT,
-                  member_user_ids TEXT,
-                  seats_left INTEGER,
-                  menu TEXT,
-                  payer_name TEXT,
-                  UNIQUE(date, host_user_id))'''
-    )
-
-    # Migration: add member_user_ids / payer_name if missing (legacy)
+    # Hosting groups (meal-aware)
+    # kind: (dinner only) 'meal' | 'drink'
     c.execute("PRAGMA table_info(lunch_groups)")
     gcols = {row[1] for row in c.fetchall()}
-    if "member_user_ids" not in gcols:
-        c.execute("ALTER TABLE lunch_groups ADD COLUMN member_user_ids TEXT")
-    if "payer_name" not in gcols:
-        c.execute("ALTER TABLE lunch_groups ADD COLUMN payer_name TEXT")
+    if not gcols:
+        # fresh db
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS lunch_groups
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      date TEXT,
+                      meal TEXT,
+                      host_user_id INTEGER,
+                      member_names TEXT,
+                      member_user_ids TEXT,
+                      seats_left INTEGER,
+                      menu TEXT,
+                      payer_name TEXT,
+                      kind TEXT,
+                      UNIQUE(date, meal, host_user_id))'''
+        )
+    elif "meal" not in gcols:
+        # Legacy schema → rebuild with meal
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS lunch_groups_new
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      date TEXT,
+                      meal TEXT,
+                      host_user_id INTEGER,
+                      member_names TEXT,
+                      member_user_ids TEXT,
+                      seats_left INTEGER,
+                      menu TEXT,
+                      payer_name TEXT,
+                      kind TEXT,
+                      UNIQUE(date, meal, host_user_id))'''
+        )
+        try:
+            c.execute(
+                """
+                INSERT INTO lunch_groups_new(date, meal, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name, kind)
+                SELECT date, 'lunch', host_user_id, member_names, member_user_ids, seats_left, menu, payer_name, NULL
+                FROM lunch_groups
+                """
+            )
+        except Exception:
+            pass
+        try:
+            c.execute("DROP TABLE lunch_groups")
+        except Exception:
+            pass
+        c.execute("ALTER TABLE lunch_groups_new RENAME TO lunch_groups")
+        gcols = {"date","meal","host_user_id","member_names","member_user_ids","seats_left","menu","payer_name","kind"}
+    else:
+        # Ensure missing columns
+        if "member_user_ids" not in gcols:
+            c.execute("ALTER TABLE lunch_groups ADD COLUMN member_user_ids TEXT")
+        if "payer_name" not in gcols:
+            c.execute("ALTER TABLE lunch_groups ADD COLUMN payer_name TEXT")
+        if "kind" not in gcols:
+            c.execute("ALTER TABLE lunch_groups ADD COLUMN kind TEXT")
 
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_groups_day
-           ON lunch_groups(date)"""
+           ON lunch_groups(date, meal)"""
     )
 
-    # Normalized group members (new)
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS group_members
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  date TEXT,
-                  host_user_id INTEGER,
-                  user_id INTEGER,
-                  UNIQUE(date, host_user_id, user_id))'''
-    )
+    # Normalized group members (meal-aware)
+    c.execute("PRAGMA table_info(group_members)")
+    gmcols = {row[1] for row in c.fetchall()}
+    if not gmcols:
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS group_members
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      date TEXT,
+                      meal TEXT,
+                      host_user_id INTEGER,
+                      user_id INTEGER,
+                      UNIQUE(date, meal, host_user_id, user_id))'''
+        )
+    elif "meal" not in gmcols:
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS group_members_new
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      date TEXT,
+                      meal TEXT,
+                      host_user_id INTEGER,
+                      user_id INTEGER,
+                      UNIQUE(date, meal, host_user_id, user_id))'''
+        )
+        try:
+            c.execute("INSERT INTO group_members_new(date, meal, host_user_id, user_id) SELECT date, 'lunch', host_user_id, user_id FROM group_members")
+        except Exception:
+            pass
+        try:
+            c.execute("DROP TABLE group_members")
+        except Exception:
+            pass
+        c.execute("ALTER TABLE group_members_new RENAME TO group_members")
+
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_group_members_day_host
-           ON group_members(date, host_user_id)"""
+           ON group_members(date, meal, host_user_id)"""
     )
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_group_members_day_user
-           ON group_members(date, user_id)"""
+           ON group_members(date, meal, user_id)"""
     )
 
     # Auth sessions (remember login across refresh)
@@ -180,33 +273,104 @@ def init_db():
            ON auth_sessions(user_id)"""
     )
 
-    # Requests table
+    # Requests table (meal-aware)
     # status: pending | accepted | declined | cancelled
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS requests
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  from_user_id INTEGER,
-                  to_user_id INTEGER,
-                  group_host_user_id INTEGER,
-                  date TEXT,
-                  status TEXT,
-                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
-    )
+    # kind: (dinner only) 'meal' | 'drink'
+    c.execute("PRAGMA table_info(requests)")
+    rcols = {row[1] for row in c.fetchall()}
+    if not rcols:
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS requests
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      from_user_id INTEGER,
+                      to_user_id INTEGER,
+                      group_host_user_id INTEGER,
+                      date TEXT,
+                      meal TEXT,
+                      status TEXT,
+                      kind TEXT,
+                      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
+        )
+    elif "meal" not in rcols:
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS requests_new
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      from_user_id INTEGER,
+                      to_user_id INTEGER,
+                      group_host_user_id INTEGER,
+                      date TEXT,
+                      meal TEXT,
+                      status TEXT,
+                      kind TEXT,
+                      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
+        )
+        try:
+            c.execute(
+                """
+                INSERT INTO requests_new(id, from_user_id, to_user_id, group_host_user_id, date, meal, status, kind, timestamp)
+                SELECT id, from_user_id, to_user_id, group_host_user_id, date, 'lunch', status, NULL, timestamp
+                FROM requests
+                """
+            )
+        except Exception:
+            pass
+        try:
+            c.execute("DROP TABLE requests")
+        except Exception:
+            pass
+        c.execute("ALTER TABLE requests_new RENAME TO requests")
+        rcols = {"id","from_user_id","to_user_id","group_host_user_id","date","meal","status","kind","timestamp"}
+    else:
+        if "kind" not in rcols:
+            c.execute("ALTER TABLE requests ADD COLUMN kind TEXT")
 
-    # Group chat (members-only)
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS group_chat
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  date TEXT,
-                  host_user_id INTEGER,
-                  user_id INTEGER,
-                  username TEXT,
-                  message TEXT,
-                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
-    )
+
+    # Group chat (meal-aware, members-only)
+    c.execute("PRAGMA table_info(group_chat)")
+    gccols = {row[1] for row in c.fetchall()}
+    if not gccols:
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS group_chat
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      date TEXT,
+                      meal TEXT,
+                      host_user_id INTEGER,
+                      user_id INTEGER,
+                      username TEXT,
+                      message TEXT,
+                      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
+        )
+    elif "meal" not in gccols:
+        c.execute(
+            '''CREATE TABLE IF NOT EXISTS group_chat_new
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      date TEXT,
+                      meal TEXT,
+                      host_user_id INTEGER,
+                      user_id INTEGER,
+                      username TEXT,
+                      message TEXT,
+                      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
+        )
+        try:
+            c.execute(
+                """
+                INSERT INTO group_chat_new(id, date, meal, host_user_id, user_id, username, message, timestamp)
+                SELECT id, date, 'lunch', host_user_id, user_id, username, message, timestamp
+                FROM group_chat
+                """
+            )
+        except Exception:
+            pass
+        try:
+            c.execute("DROP TABLE group_chat")
+        except Exception:
+            pass
+        c.execute("ALTER TABLE group_chat_new RENAME TO group_chat")
+
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_group_chat_day_host
-           ON group_chat(date, host_user_id, timestamp)"""
+           ON group_chat(date, meal, host_user_id, timestamp)"""
     )
 
     # Migration: add group_host_user_id if missing
@@ -223,15 +387,15 @@ def init_db():
         pass
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_requests_pair_day
-           ON requests(date, from_user_id, to_user_id)"""
+           ON requests(date, meal, from_user_id, to_user_id)"""
     )
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_requests_to_day
-           ON requests(date, to_user_id)"""
+           ON requests(date, meal, to_user_id)"""
     )
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_requests_from_day
-           ON requests(date, from_user_id)"""
+           ON requests(date, meal, from_user_id)"""
     )
 
     conn.commit()
@@ -400,37 +564,34 @@ def update_user_chat_id(user_id, chat_id):
     conn.close()
 
 
-def set_planning(user_id: int):
-    # Planning should not override Booked
-    update_status(user_id, "Planning")
+def set_planning(user_id: int, *, meal: str = "lunch"):
+    update_status(user_id, "Planning", meal=_norm_meal(meal))
 
 
-def has_accepted_today(user_id: int) -> bool:
+def has_accepted_today(user_id: int, *, meal: str = "lunch") -> bool:
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
         SELECT 1
         FROM requests
-        WHERE date=? AND status='accepted' AND (from_user_id=? OR to_user_id=?)
+        WHERE date=? AND meal=? AND status='accepted' AND (from_user_id=? OR to_user_id=?)
         LIMIT 1
         """,
-        (today, user_id, user_id),
+        (today, meal, user_id, user_id),
     )
     row = c.fetchone()
     conn.close()
     return bool(row)
 
 
-def reconcile_user_today(user_id: int):
-    """Make Booked highest priority if any accepted invite exists today.
-
-    Important: don't re-apply Booked on every rerun, because update_status(Booked)
-    cancels pending requests.
-    """
-    if has_accepted_today(user_id) and get_status_today(user_id) != "Booked":
-        update_status(user_id, "Booked")
+def reconcile_user_today(user_id: int, *, meal: str = "lunch"):
+    """Make Booked highest priority if any accepted invite exists today (per meal)."""
+    meal = _norm_meal(meal)
+    if has_accepted_today(user_id, meal=meal) and get_status_today(user_id, meal=meal) != "Booked":
+        update_status(user_id, "Booked", meal=meal)
 
 def get_user_by_employee_id(employee_id: str):
     conn = get_connection()
@@ -484,94 +645,120 @@ def get_display_name(user_id: int) -> str:
     parts = [p for p in [team, name, mapped] if p]
     return " ".join(parts) if parts else name
 
-def clear_status_today(user_id: int, *, clear_hosting: bool = True):
-    """Remove today's status row so UI shows 'Not Set'.
+def clear_status_today(user_id: int, *, meal: str = "lunch", clear_hosting: bool = True):
+    """Remove today's status row so UI shows 'Not Set' (per meal).
 
-    If clear_hosting=True, also remove the user's hosting listing for today.
+    If clear_hosting=True, also remove the user's hosting listing for today+meal.
     """
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM daily_status WHERE date=? AND user_id=?", (today, user_id))
+    c.execute("DELETE FROM daily_status WHERE date=? AND meal=? AND user_id=?", (today, meal, user_id))
     conn.commit()
     conn.close()
 
     if clear_hosting:
         try:
-            delete_group(user_id)
+            delete_group(user_id, meal=meal)
         except Exception:
             pass
 
 
-def update_status(user_id, status, *, force: bool = False):
-    """Set today's status.
+def update_status(user_id, status, *, meal: str = "lunch", kind: str | None = None, force: bool = False):
+    """Set today's status (per meal).
 
-    Rule: Booked is terminal for the day (cannot be downgraded),
-    but we still allow creating a hosting group while Booked.
+    - meal: lunch | dinner
+    - kind: (dinner only) 'meal' | 'drink'
 
-    Use force=True for admin/cleanup flows (e.g., cancellation).
+    Rule: Booked is terminal for the day (cannot be downgraded) unless force=True.
     """
     today = kst_today_iso()
+    meal = _norm_meal(meal)
+    kind = _norm_kind(kind)
 
-    current = get_status_today(user_id)
+    current = get_status_today(user_id, meal=meal)
     if (not force) and current == "Booked" and status not in ("Booked",):
-        # Do not downgrade Booked.
         return
 
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT OR REPLACE INTO daily_status (id, date, user_id, status) VALUES ((SELECT id FROM daily_status WHERE date=? AND user_id=?), ?, ?, ?)",
-        (today, user_id, today, user_id, status),
+        """
+        INSERT OR REPLACE INTO daily_status (id, date, meal, user_id, status, kind)
+        VALUES ((SELECT id FROM daily_status WHERE date=? AND meal=? AND user_id=?), ?, ?, ?, ?, ?)
+        """,
+        (today, meal, user_id, today, meal, user_id, status, kind),
     )
     conn.commit()
     conn.close()
 
-    # NOTE: We no longer auto-cancel pending requests when Booked.
-    # Multiple people can invite/poke; user can choose/accept.
-
     # If user explicitly sets to Free/Planning/Not Set, remove their hosting listing.
     # But do NOT delete hosting just because they became Booked.
     if status in ("Free", "Planning", "Not Set"):
-        delete_group(user_id)
+        delete_group(user_id, meal=meal)
 
 
-def delete_group(host_user_id: int):
+def delete_group(host_user_id: int, *, meal: str = "lunch"):
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM lunch_groups WHERE date=? AND host_user_id=?", (today, host_user_id))
+    c.execute("DELETE FROM lunch_groups WHERE date=? AND meal=? AND host_user_id=?", (today, meal, host_user_id))
     conn.commit()
     conn.close()
 
 
-def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: str, payer_name: str | None = None):
-    """Upsert today's hosting group.
+def upsert_group(
+    host_user_id: int,
+    member_names: str,
+    seats_left: int,
+    menu: str,
+    payer_name: str | None = None,
+    *,
+    meal: str = "lunch",
+    kind: str | None = None,
+):
+    """Upsert today's hosting group (per meal).
 
-    Ensures host is registered as a member in group_members.
+    kind: (dinner only) 'meal' | 'drink'
     """
     today = kst_today_iso()
+    meal = _norm_meal(meal)
+    kind = _norm_kind(kind)
 
     conn = get_connection()
     c = conn.cursor()
 
-    # Keep legacy CSV fields for display
     member_names = member_names or ""
     member_user_ids = str(host_user_id)
 
     c.execute(
         """
-        INSERT OR REPLACE INTO lunch_groups (id, date, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name)
-        VALUES ((SELECT id FROM lunch_groups WHERE date=? AND host_user_id=?), ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO lunch_groups (id, date, meal, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name, kind)
+        VALUES ((SELECT id FROM lunch_groups WHERE date=? AND meal=? AND host_user_id=?), ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (today, host_user_id, today, host_user_id, member_names, member_user_ids, int(seats_left), menu, payer_name or ""),
+        (
+            today,
+            meal,
+            host_user_id,
+            today,
+            meal,
+            host_user_id,
+            member_names,
+            member_user_ids,
+            int(seats_left),
+            menu,
+            payer_name or "",
+            kind,
+        ),
     )
 
     # Ensure host is in normalized members
     try:
         c.execute(
-            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
-            (today, host_user_id, host_user_id),
+            "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+            (today, meal, host_user_id, host_user_id),
         )
     except Exception:
         pass
@@ -580,42 +767,40 @@ def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: st
     conn.close()
 
 
-def get_groups_today():
-    """Return today's hosting groups.
-
-    Hosts may be Booked (e.g., 1:1 already fixed but still recruiting more).
-    We treat the existence of a lunch_groups row as 'hosting'.
-    """
+def get_groups_today(*, meal: str = "lunch"):
+    """Return today's hosting groups for a meal."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
-        SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name
+        SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name, g.kind
         FROM lunch_groups g
         JOIN users u ON u.user_id = g.host_user_id
-        WHERE g.date=?
+        WHERE g.date=? AND g.meal=?
         ORDER BY g.id DESC
         """,
-        (today,),
+        (today, meal),
     )
     rows = c.fetchall()
     conn.close()
     return rows
 
 
-def get_group_by_host_on_date(host_user_id: int, date_str: str):
+def get_group_by_host_on_date(host_user_id: int, date_str: str, *, meal: str = "lunch"):
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
-        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name
+        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name, g.kind
         FROM lunch_groups g
         JOIN users u ON u.user_id = g.host_user_id
-        WHERE g.date=? AND g.host_user_id=?
+        WHERE g.date=? AND g.meal=? AND g.host_user_id=?
         LIMIT 1
         """,
-        (date_str, host_user_id),
+        (date_str, meal, host_user_id),
     )
     row = c.fetchone()
     conn.close()
@@ -633,74 +818,76 @@ def update_group_menu_payer(host_user_id: int, date_str: str, menu: str | None, 
     conn.close()
 
 
-def get_group_by_host_today(host_user_id: int):
-    return get_group_by_host_on_date(host_user_id, kst_today_iso())
+def get_group_by_host_today(host_user_id: int, *, meal: str = "lunch"):
+    return get_group_by_host_on_date(host_user_id, kst_today_iso(), meal=meal)
 
 
-def ensure_member_in_group(host_user_id: int, user_id: int, date_str: str):
+def ensure_member_in_group(host_user_id: int, user_id: int, date_str: str, *, meal: str = "lunch"):
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
-        (date_str, host_user_id, user_id),
+        "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+        (date_str, meal, host_user_id, user_id),
     )
     conn.commit()
     conn.close()
 
 
-def ensure_fixed_group_today(host_user_id: int):
+def ensure_fixed_group_today(host_user_id: int, *, meal: str = "lunch", kind: str | None = None):
     """Ensure a non-recruiting group exists (seats_left=0) for the host today."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
+    kind = _norm_kind(kind)
     conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
-            "INSERT OR IGNORE INTO lunch_groups(date, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name) VALUES (?,?,?,?,?,?,?)",
-            (today, host_user_id, "", "", 0, "", ""),
+            "INSERT OR IGNORE INTO lunch_groups(date, meal, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name, kind) VALUES (?,?,?,?,?,?,?,?,?)",
+            (today, meal, host_user_id, "", "", 0, "", "", kind),
         )
         c.execute(
-            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
-            (today, host_user_id, host_user_id),
+            "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+            (today, meal, host_user_id, host_user_id),
         )
         conn.commit()
     finally:
         conn.close()
 
 
-def add_member_fixed_group(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
+def add_member_fixed_group(host_user_id: int, member_user_id: int, member_name: str, *, meal: str = "lunch") -> tuple[bool, str | None]:
     """Add member to host's fixed group (no seats decrement)."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     member_name = (member_name or "").strip()
     if not member_name:
         return False, "member_name이 비어있습니다."
 
-    ensure_fixed_group_today(host_user_id)
+    ensure_fixed_group_today(host_user_id, meal=meal)
 
     conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
-            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
-            (today, host_user_id, member_user_id),
+            "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+            (today, meal, host_user_id, member_user_id),
         )
         conn.commit()
     finally:
         conn.close()
 
     try:
-        _rebuild_group_legacy_fields(host_user_id, today)
+        _rebuild_group_legacy_fields(host_user_id, today, meal=meal)
     except Exception:
         pass
 
     return True, None
 
 
-def accept_group_join(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
-    """Accept a join by ensuring membership + decrementing seats_left + syncing display fields.
-
-    This is used at the moment a pending join invite is accepted.
-    """
+def accept_group_join(host_user_id: int, member_user_id: int, member_name: str, *, meal: str = "lunch") -> tuple[bool, str | None]:
+    """Accept a join by ensuring membership + decrementing seats_left + syncing display fields."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     member_name = (member_name or "").strip()
     if not member_name:
         return False, "member_name이 비어있습니다."
@@ -709,27 +896,25 @@ def accept_group_join(host_user_id: int, member_user_id: int, member_name: str) 
     c = conn.cursor()
     try:
         c.execute(
-            "SELECT seats_left FROM lunch_groups WHERE date=? AND host_user_id=?",
-            (today, host_user_id),
+            "SELECT seats_left FROM lunch_groups WHERE date=? AND meal=? AND host_user_id=?",
+            (today, meal, host_user_id),
         )
         row = c.fetchone()
         if not row:
             return False, "모집글을 찾지 못했어요."
 
-        # Ensure host + member in normalized members
         c.execute(
-            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
-            (today, host_user_id, host_user_id),
+            "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+            (today, meal, host_user_id, host_user_id),
         )
         c.execute(
-            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
-            (today, host_user_id, member_user_id),
+            "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+            (today, meal, host_user_id, member_user_id),
         )
 
-        # Decrement seats once (accept-time)
         c.execute(
-            "UPDATE lunch_groups SET seats_left = seats_left - 1 WHERE date=? AND host_user_id=? AND seats_left > 0",
-            (today, host_user_id),
+            "UPDATE lunch_groups SET seats_left = seats_left - 1 WHERE date=? AND meal=? AND host_user_id=? AND seats_left > 0",
+            (today, meal, host_user_id),
         )
         if c.rowcount == 0:
             return False, "남은 자리가 없어요."
@@ -738,9 +923,8 @@ def accept_group_join(host_user_id: int, member_user_id: int, member_name: str) 
     finally:
         conn.close()
 
-    # Sync legacy display fields from normalized members
     try:
-        _rebuild_group_legacy_fields(host_user_id, today)
+        _rebuild_group_legacy_fields(host_user_id, today, meal=meal)
     except Exception:
         pass
 
@@ -829,63 +1013,67 @@ def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str
         conn.close()
 
 
-def set_booked_for_group(host_user_id: int):
+def set_booked_for_group(host_user_id: int, *, meal: str = "lunch"):
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT user_id FROM group_members WHERE date=? AND host_user_id=?",
-        (today, host_user_id),
+        "SELECT user_id FROM group_members WHERE date=? AND meal=? AND host_user_id=?",
+        (today, meal, host_user_id),
     )
     ids = [r[0] for r in c.fetchall()]
     conn.close()
 
     for uid in ids:
         try:
-            update_status(int(uid), "Booked")
-            cancel_pending_requests_for_user(int(uid))
+            update_status(int(uid), "Booked", meal=meal)
+            cancel_pending_requests_for_user(int(uid), meal=meal)
         except Exception:
             continue
 
 
-def get_groups_for_user_today(user_id: int):
+def get_groups_for_user_today(user_id: int, *, meal: str = "lunch"):
     """Groups where user_id is a member (normalized group_members)."""
     today = kst_today_iso()
-    return get_groups_for_user_on_date(user_id, today)
+    return get_groups_for_user_on_date(user_id, today, meal=meal)
 
 
-def get_groups_for_user_on_date(user_id: int, date_str: str):
+def get_groups_for_user_on_date(user_id: int, date_str: str, *, meal: str = "lunch"):
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
-        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name
+        SELECT g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name, g.kind
         FROM group_members gm
-        JOIN lunch_groups g ON g.date = gm.date AND g.host_user_id = gm.host_user_id
+        JOIN lunch_groups g ON g.date = gm.date AND g.meal = gm.meal AND g.host_user_id = gm.host_user_id
         JOIN users u ON u.user_id = g.host_user_id
-        WHERE gm.date=? AND gm.user_id=?
+        WHERE gm.date=? AND gm.meal=? AND gm.user_id=?
         ORDER BY g.id DESC
         """,
-        (date_str, user_id),
+        (date_str, meal, user_id),
     )
     rows = c.fetchall()
     conn.close()
     return rows
 
 
-def is_member_of_group(host_user_id: int, user_id: int, date_str: str) -> bool:
+def is_member_of_group(host_user_id: int, user_id: int, date_str: str, *, meal: str = "lunch") -> bool:
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT 1 FROM group_members WHERE date=? AND host_user_id=? AND user_id=? LIMIT 1",
-        (date_str, host_user_id, user_id),
+        "SELECT 1 FROM group_members WHERE date=? AND meal=? AND host_user_id=? AND user_id=? LIMIT 1",
+        (date_str, meal, host_user_id, user_id),
     )
     row = c.fetchone()
     conn.close()
     return bool(row)
 
 
-def list_group_members(host_user_id: int, date_str: str):
+def list_group_members(host_user_id: int, date_str: str, *, meal: str = "lunch"):
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -893,27 +1081,28 @@ def list_group_members(host_user_id: int, date_str: str):
         SELECT u.user_id, u.username, u.english_name
         FROM group_members gm
         JOIN users u ON u.user_id = gm.user_id
-        WHERE gm.date=? AND gm.host_user_id=?
+        WHERE gm.date=? AND gm.meal=? AND gm.host_user_id=?
         ORDER BY u.username
         """,
-        (date_str, host_user_id),
+        (date_str, meal, host_user_id),
     )
     rows = c.fetchall()
     conn.close()
     return rows
 
 
-def _rebuild_group_legacy_fields(host_user_id: int, date_str: str):
+def _rebuild_group_legacy_fields(host_user_id: int, date_str: str, *, meal: str = "lunch"):
     """Keep lunch_groups.member_names/member_user_ids in sync from normalized members."""
-    members = list_group_members(host_user_id, date_str)
+    meal = _norm_meal(meal)
+    members = list_group_members(host_user_id, date_str, meal=meal)
     member_names = ", ".join([format_name(name, en) for _uid, name, en in members])
     member_user_ids = ",".join([str(uid) for uid, _name, _en in members])
 
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "UPDATE lunch_groups SET member_names=?, member_user_ids=? WHERE date=? AND host_user_id=?",
-        (member_names, member_user_ids, date_str, host_user_id),
+        "UPDATE lunch_groups SET member_names=?, member_user_ids=? WHERE date=? AND meal=? AND host_user_id=?",
+        (member_names, member_user_ids, date_str, meal, host_user_id),
     )
     conn.commit()
     conn.close()
@@ -976,9 +1165,10 @@ def remove_member_from_group(host_user_id: int, user_id: int, date_str: str) -> 
     return True, None
 
 
-def cancel_accepted_for_users(user_ids: list[int]):
-    """Cancel today's accepted requests for the given users."""
+def cancel_accepted_for_users(user_ids: list[int], *, meal: str = "lunch"):
+    """Cancel today's accepted requests for the given users (per meal)."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     for uid in user_ids:
@@ -986,17 +1176,18 @@ def cancel_accepted_for_users(user_ids: list[int]):
             """
             UPDATE requests
             SET status='cancelled'
-            WHERE date=? AND status='accepted' AND (from_user_id=? OR to_user_id=?)
+            WHERE date=? AND meal=? AND status='accepted' AND (from_user_id=? OR to_user_id=?)
             """,
-            (today, uid, uid),
+            (today, meal, uid, uid),
         )
     conn.commit()
     conn.close()
 
 
-def get_accepted_partners_today(user_id: int):
-    """For 1:1 accepted lunches (no group), return the other user(s)."""
+def get_accepted_partners_today(user_id: int, *, meal: str = "lunch"):
+    """For 1:1 accepted invites (no group), return the other user(s)."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1005,44 +1196,47 @@ def get_accepted_partners_today(user_id: int):
                u.username
         FROM requests r
         JOIN users u ON u.user_id = (CASE WHEN r.from_user_id=? THEN r.to_user_id ELSE r.from_user_id END)
-        WHERE r.date=? AND r.status='accepted' AND r.group_host_user_id IS NULL
+        WHERE r.date=? AND r.meal=? AND r.status='accepted' AND r.group_host_user_id IS NULL
           AND (r.from_user_id=? OR r.to_user_id=?)
         """,
-        (user_id, user_id, today, user_id, user_id),
+        (user_id, user_id, today, meal, user_id, user_id),
     )
     rows = c.fetchall()
     conn.close()
     return rows
 
 
-def get_latest_accepted_group_host_today(user_id: int) -> int | None:
+def get_latest_accepted_group_host_today(user_id: int, *, meal: str = "lunch") -> int | None:
     """If user accepted/joined a group today, return group_host_user_id."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
         SELECT group_host_user_id
         FROM requests
-        WHERE date=? AND status='accepted' AND group_host_user_id IS NOT NULL
+        WHERE date=? AND meal=? AND status='accepted' AND group_host_user_id IS NOT NULL
           AND (from_user_id=? OR to_user_id=?)
         ORDER BY timestamp DESC
         LIMIT 1
         """,
-        (today, user_id, user_id),
+        (today, meal, user_id, user_id),
     )
     row = c.fetchone()
     conn.close()
     return int(row[0]) if row and row[0] is not None else None
 
 
-def ensure_1to1_group_today(user_a: int, user_b: int):
-    """Ensure a lunch_groups record exists for a matched 1:1 so we can store/show menu/payer.
+def ensure_1to1_group_today(user_a: int, user_b: int, *, meal: str = "lunch", kind: str | None = None):
+    """Ensure a lunch_groups record exists for a matched 1:1 (per meal).
 
     Host is deterministic (min user_id) to avoid duplicates.
     seats_left=0 by default.
     """
     today = kst_today_iso()
+    meal = _norm_meal(meal)
+    kind = _norm_kind(kind)
     host_uid = int(min(user_a, user_b))
     other_uid = int(max(user_a, user_b))
 
@@ -1060,19 +1254,19 @@ def ensure_1to1_group_today(user_a: int, user_b: int):
     try:
         c.execute(
             """
-            INSERT OR IGNORE INTO lunch_groups(date, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name)
-            VALUES (?,?,?,?,?,?,?)
+            INSERT OR IGNORE INTO lunch_groups(date, meal, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name, kind)
+            VALUES (?,?,?,?,?,?,?,?,?)
             """,
-            (today, host_uid, f"{a_name}, {b_name}", f"{host_uid},{other_uid}", 0, "", ""),
+            (today, meal, host_uid, f"{a_name}, {b_name}", f"{host_uid},{other_uid}", 0, "", "", kind),
         )
         # ensure both members
         c.execute(
-            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
-            (today, host_uid, host_uid),
+            "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+            (today, meal, host_uid, host_uid),
         )
         c.execute(
-            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
-            (today, host_uid, other_uid),
+            "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+            (today, meal, host_uid, other_uid),
         )
         conn.commit()
     finally:
@@ -1080,14 +1274,15 @@ def ensure_1to1_group_today(user_a: int, user_b: int):
 
     # keep legacy fields aligned
     try:
-        _rebuild_group_legacy_fields(host_uid, today)
+        _rebuild_group_legacy_fields(host_uid, today, meal=meal)
     except Exception:
         pass
 
 
-def get_latest_accepted_1to1_detail_today(user_id: int):
+def get_latest_accepted_1to1_detail_today(user_id: int, *, meal: str = "lunch"):
     """Return (req_id, other_user_id, other_name, timestamp) for latest accepted 1:1 request."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1098,31 +1293,27 @@ def get_latest_accepted_1to1_detail_today(user_id: int):
                r.timestamp
         FROM requests r
         JOIN users u ON u.user_id = (CASE WHEN r.from_user_id=? THEN r.to_user_id ELSE r.from_user_id END)
-        WHERE r.date=? AND r.status='accepted' AND r.group_host_user_id IS NULL
+        WHERE r.date=? AND r.meal=? AND r.status='accepted' AND r.group_host_user_id IS NULL
           AND (r.from_user_id=? OR r.to_user_id=?)
         ORDER BY r.timestamp DESC
         LIMIT 1
         """,
-        (user_id, user_id, today, user_id, user_id),
+        (user_id, user_id, today, meal, user_id, user_id),
     )
     row = c.fetchone()
     conn.close()
     return row
 
 
-def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
-    """Cancel a booked lunch.
-
-    - If 1:1 booking: cancel both sides (set statuses Free).
-    - If group booking (>2): remove only this user from the group (set status Free).
-    """
+def cancel_booking_for_user(user_id: int, *, meal: str = "lunch") -> tuple[bool, str | None]:
+    """Cancel a booked meal (per meal)."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
 
-    # If user is in a group, use that as source of truth.
-    groups = get_groups_for_user_on_date(user_id, today)
+    groups = get_groups_for_user_on_date(user_id, today, meal=meal)
     if groups:
         _gid, _date, host_uid, _host_name, _member_names, _seats_left, _menu, _payer_name = groups[0]
-        members = list_group_members(host_uid, today)
+        members = list_group_members(host_uid, today, meal=meal)
         member_ids = [uid for uid, _n in members]
 
         if len(member_ids) <= 2:
@@ -1130,32 +1321,32 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
             related_ids = set(member_ids)
 
             # safety: if members table is incomplete, also include latest accepted 1:1 partner
-            d = get_latest_accepted_1to1_detail_today(user_id)
+            d = get_latest_accepted_1to1_detail_today(user_id, meal=meal)
             if d:
                 _req_id, other_id, _other_name, _ts = d
                 related_ids.add(int(other_id))
                 related_ids.add(int(user_id))
 
             related_ids_list = sorted(list(related_ids))
-            cancel_accepted_for_users(related_ids_list)
+            cancel_accepted_for_users(related_ids_list, meal=meal)
             for uid in related_ids_list:
-                clear_status_today(uid)
+                clear_status_today(uid, meal=meal)
 
             conn = get_connection()
             c = conn.cursor()
-            c.execute("DELETE FROM group_members WHERE date=? AND host_user_id=?", (today, host_uid))
-            c.execute("DELETE FROM lunch_groups WHERE date=? AND host_user_id=?", (today, host_uid))
+            c.execute("DELETE FROM group_members WHERE date=? AND meal=? AND host_user_id=?", (today, meal, host_uid))
+            c.execute("DELETE FROM lunch_groups WHERE date=? AND meal=? AND host_user_id=?", (today, meal, host_uid))
             conn.commit()
             conn.close()
             return True, None
 
         # group > 2: remove only this user
-        ok, err = remove_member_from_group(host_uid, user_id, today)
+        ok, err = remove_member_from_group(host_uid, user_id, today, meal=meal)
         if not ok:
             return False, err
 
-        cancel_accepted_for_users([user_id])
-        clear_status_today(user_id)
+        cancel_accepted_for_users([user_id], meal=meal)
+        clear_status_today(user_id, meal=meal)
         return True, None
 
     # No group: handle 1:1 accepted request
@@ -1193,63 +1384,67 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     return True, None
 
 
-def clear_group_chat(host_user_id: int, date_str: str):
+def clear_group_chat(host_user_id: int, date_str: str, *, meal: str = "lunch"):
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM group_chat WHERE date=? AND host_user_id=?", (date_str, host_user_id))
+    c.execute("DELETE FROM group_chat WHERE date=? AND meal=? AND host_user_id=?", (date_str, meal, host_user_id))
     conn.commit()
     conn.close()
 
 
-def list_group_chat(host_user_id: int, date_str: str, limit: int = 200):
+def list_group_chat(host_user_id: int, date_str: str, *, meal: str = "lunch", limit: int = 200):
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
         SELECT user_id, username, message, timestamp
         FROM group_chat
-        WHERE date=? AND host_user_id=?
+        WHERE date=? AND meal=? AND host_user_id=?
         ORDER BY timestamp ASC
         LIMIT ?
         """,
-        (date_str, host_user_id, int(limit)),
+        (date_str, meal, host_user_id, int(limit)),
     )
     rows = c.fetchall()
     conn.close()
     return rows
 
 
-def add_group_chat(host_user_id: int, user_id: int, username: str, message: str, date_str: str) -> tuple[bool, str | None]:
+def add_group_chat(host_user_id: int, user_id: int, username: str, message: str, date_str: str, *, meal: str = "lunch") -> tuple[bool, str | None]:
+    meal = _norm_meal(meal)
     message = (message or "").strip()
     if not message:
         return False, "메시지를 입력해주세요."
 
-    if not is_member_of_group(host_user_id, user_id, date_str):
+    if not is_member_of_group(host_user_id, user_id, date_str, meal=meal):
         return False, "그룹 멤버만 채팅을 사용할 수 있어요."
 
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO group_chat(date, host_user_id, user_id, username, message, timestamp) VALUES (?,?,?,?,?,?)",
-        (date_str, host_user_id, user_id, username, message, kst_now_str()),
+        "INSERT INTO group_chat(date, meal, host_user_id, user_id, username, message, timestamp) VALUES (?,?,?,?,?,?,?,?)",
+        (date_str, meal, host_user_id, user_id, username, message, kst_now_str()),
     )
     conn.commit()
     conn.close()
     return True, None
 
 
-def list_my_group_dates(user_id: int, limit: int = 30):
+def list_my_group_dates(user_id: int, *, meal: str = "lunch", limit: int = 30):
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
         SELECT DISTINCT gm.date
         FROM group_members gm
-        WHERE gm.user_id=?
+        WHERE gm.user_id=? AND gm.meal=?
         ORDER BY gm.date DESC
         LIMIT ?
         """,
-        (user_id, limit),
+        (user_id, meal, limit),
     )
     rows = [r[0] for r in c.fetchall()]
     conn.close()
@@ -1290,82 +1485,110 @@ def delete_auth_session(token: str):
     conn.commit()
     conn.close()
 
-def _has_host_group_today(user_id: int) -> bool:
+def _has_host_group_today(user_id: int, *, meal: str = "lunch") -> bool:
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT 1 FROM lunch_groups WHERE date=? AND host_user_id=? LIMIT 1",
-        (today, user_id),
+        "SELECT 1 FROM lunch_groups WHERE date=? AND meal=? AND host_user_id=? LIMIT 1",
+        (today, meal, user_id),
     )
     row = c.fetchone()
     conn.close()
     return bool(row)
 
 
-def get_all_statuses():
-    """Return all users + computed-safe status for today.
-
-    Defensive logic to avoid stale UI:
-    - If stored status is Booked but there is no accepted request today → treat as Not Set.
-    - If stored status is Hosting but there is no lunch_groups row today → treat as Not Set.
-    """
+def get_all_statuses(*, meal: str = "lunch"):
+    """Return all users + computed-safe status for today (per meal)."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
-        SELECT u.user_id, u.username, COALESCE(ds.status, 'Not Set') as status, u.telegram_chat_id
+        SELECT u.user_id, u.username, COALESCE(ds.status, 'Not Set') as status, u.telegram_chat_id, ds.kind
         FROM users u
-        LEFT JOIN daily_status ds ON u.user_id = ds.user_id AND ds.date = ?
+        LEFT JOIN daily_status ds ON u.user_id = ds.user_id AND ds.date = ? AND ds.meal = ?
         """,
-        (today,),
+        (today, meal),
     )
     results = c.fetchall()
     conn.close()
 
     fixed = []
-    for user_id, username, status, chat_id in results:
-        if status == "Booked" and not has_accepted_today(int(user_id)):
+    for user_id, username, status, chat_id, kind in results:
+        if status == "Booked" and not has_accepted_today(int(user_id), meal=meal):
             status = "Not Set"
-        if status == "Hosting" and not _has_host_group_today(int(user_id)):
+        if status == "Hosting" and not _has_host_group_today(int(user_id), meal=meal):
             status = "Not Set"
-        fixed.append((user_id, username, status, chat_id))
+        fixed.append((user_id, username, status, chat_id, kind))
     return fixed
 
 
-def get_status_today(user_id: int) -> str:
+def _norm_meal(meal: str | None) -> str:
+    m = (meal or "lunch").strip().lower()
+    return "dinner" if m == "dinner" else "lunch"
+
+
+def _norm_kind(kind: str | None) -> str | None:
+    k = (kind or "").strip().lower()
+    if not k:
+        return None
+    if k in ("meal", "rice", "밥"):
+        return "meal"
+    if k in ("drink", "술", "alcohol"):
+        return "drink"
+    return k
+
+
+def get_status_row_today(user_id: int, *, meal: str = "lunch") -> tuple[str, str | None]:
+    """Return (status, kind) for today+meal."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT COALESCE(status,'Not Set') FROM daily_status WHERE date=? AND user_id=?",
-        (today, user_id),
+        "SELECT COALESCE(status,'Not Set'), kind FROM daily_status WHERE date=? AND meal=? AND user_id=?",
+        (today, meal, user_id),
     )
     row = c.fetchone()
     conn.close()
-    return row[0] if row else "Not Set"
+    if not row:
+        return "Not Set", None
+    return row[0], row[1]
 
-def create_request(from_user_id, to_user_id, group_host_user_id: int | None = None):
-    """Create a lunch invite request for today.
 
-    Rules:
-    - If either side is already Booked today, block.
-    - Side effect: both requester and receiver become "Planning".
+def get_status_today(user_id: int, *, meal: str = "lunch") -> str:
+    return get_status_row_today(user_id, meal=meal)[0]
+
+def create_request(
+    from_user_id,
+    to_user_id,
+    group_host_user_id: int | None = None,
+    *,
+    meal: str = "lunch",
+    kind: str | None = None,
+):
+    """Create an invite request for today (per meal).
+
+    kind: (dinner only) 'meal' | 'drink'
 
     Returns: (request_id, error_message)
     """
-    # one-lunch rule
+    meal = _norm_meal(meal)
+    kind = _norm_kind(kind)
+    # one-meal rule
     # If I'm inviting someone into my own hosting group (group_host_user_id == from_user_id),
     # allow even if I'm already Booked/Planning.
-    if get_status_today(from_user_id) in ("Booked", "Planning"):
+    if get_status_today(from_user_id, meal=meal) in ("Booked", "Planning"):
         if not (group_host_user_id and int(group_host_user_id) == int(from_user_id)):
             return None, "이미 점심약속이 있는것 같아요!"
 
     # Allow inviting a Booked user in two cases:
     # - join request to that booked host's group (group_host_user_id == to_user_id)
     # - host inviting someone into their own group while booked (group_host_user_id == from_user_id)
-    if get_status_today(to_user_id) == "Booked":
+    if get_status_today(to_user_id, meal=meal) == "Booked":
         ok = False
         if group_host_user_id and int(group_host_user_id) == int(to_user_id):
             ok = True
@@ -1383,17 +1606,17 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
             """
             SELECT 1
             FROM requests
-            WHERE date=? AND from_user_id=? AND to_user_id=? AND status='pending'
+            WHERE date=? AND meal=? AND from_user_id=? AND to_user_id=? AND status='pending'
             LIMIT 1
             """,
-            (today, from_user_id, to_user_id),
+            (today, meal, from_user_id, to_user_id),
         )
         if c.fetchone():
             return None, "이미 대기중인 요청이 있어요."
 
         c.execute(
-            "INSERT INTO requests (from_user_id, to_user_id, group_host_user_id, date, status) VALUES (?, ?, ?, ?, 'pending')",
-            (from_user_id, to_user_id, group_host_user_id, today),
+            "INSERT INTO requests (from_user_id, to_user_id, group_host_user_id, date, meal, status, kind) VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+            (from_user_id, to_user_id, group_host_user_id, today, meal, kind),
         )
         conn.commit()
         req_id = c.lastrowid
@@ -1403,7 +1626,7 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     # Pending request behavior:
     # - Sender becomes Planning (prevent spamming/duplicate actions)
     # - Receiver stays as-is (so they remain Free/Not Set until they accept)
-    set_planning(from_user_id)
+    set_planning(from_user_id, meal=meal)
     return req_id, None
 
 
@@ -1415,37 +1638,35 @@ def update_request_status(request_id, status):
     conn.close()
 
 
-def cancel_pending_requests_for_user(user_id: int):
-    """When user is Booked, cancel other pending invites involving them today.
-
-    Exception: if the user is hosting a group, allow pending join requests to that
-    group (group_host_user_id == user_id) to stay pending.
-    """
+def cancel_pending_requests_for_user(user_id: int, *, meal: str = "lunch"):
+    """Cancel pending invites involving the user today (per meal)."""
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
         UPDATE requests
         SET status='cancelled'
-        WHERE date=?
+        WHERE date=? AND meal=?
           AND status='pending'
           AND (from_user_id=? OR to_user_id=?)
           AND COALESCE(group_host_user_id, -1) != ?
         """,
-        (today, user_id, user_id, user_id),
+        (today, meal, user_id, user_id, user_id),
     )
     conn.commit()
     conn.close()
 
 
-def has_pending_outgoing_today(user_id: int) -> bool:
+def has_pending_outgoing_today(user_id: int, *, meal: str = "lunch") -> bool:
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT 1 FROM requests WHERE date=? AND from_user_id=? AND status='pending' LIMIT 1",
-        (today, user_id),
+        "SELECT 1 FROM requests WHERE date=? AND meal=? AND from_user_id=? AND status='pending' LIMIT 1",
+        (today, meal, user_id),
     )
     row = c.fetchone()
     conn.close()
@@ -1456,57 +1677,60 @@ def cancel_request(request_id):
     update_request_status(request_id, "cancelled")
 
 
-def get_pending_request_between(from_user_id, to_user_id):
+def get_pending_request_between(from_user_id, to_user_id, *, meal: str = "lunch"):
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
         SELECT id, status
         FROM requests
-        WHERE date=? AND from_user_id=? AND to_user_id=?
+        WHERE date=? AND meal=? AND from_user_id=? AND to_user_id=?
         ORDER BY timestamp DESC
         LIMIT 1
         """,
-        (today, from_user_id, to_user_id),
+        (today, meal, from_user_id, to_user_id),
     )
     row = c.fetchone()
     conn.close()
     return row
 
 
-def list_incoming_requests(user_id):
+def list_incoming_requests(user_id, *, meal: str = "lunch"):
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
-        SELECT r.id, r.from_user_id, u.username, r.status, r.timestamp, r.group_host_user_id
+        SELECT r.id, r.from_user_id, u.username, r.status, r.timestamp, r.group_host_user_id, r.kind
         FROM requests r
         JOIN users u ON u.user_id = r.from_user_id
-        WHERE r.date=? AND r.to_user_id=?
+        WHERE r.date=? AND r.meal=? AND r.to_user_id=?
         ORDER BY r.timestamp DESC
         """,
-        (today, user_id),
+        (today, meal, user_id),
     )
     rows = c.fetchall()
     conn.close()
     return rows
 
 
-def list_outgoing_requests(user_id):
+def list_outgoing_requests(user_id, *, meal: str = "lunch"):
     today = kst_today_iso()
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
-        SELECT r.id, r.to_user_id, u.username, r.status, r.timestamp, r.group_host_user_id
+        SELECT r.id, r.to_user_id, u.username, r.status, r.timestamp, r.group_host_user_id, r.kind
         FROM requests r
         JOIN users u ON u.user_id = r.to_user_id
-        WHERE r.date=? AND r.from_user_id=?
+        WHERE r.date=? AND r.meal=? AND r.from_user_id=?
         ORDER BY r.timestamp DESC
         """,
-        (today, user_id),
+        (today, meal, user_id),
     )
     rows = c.fetchall()
     conn.close()
