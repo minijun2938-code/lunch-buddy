@@ -57,6 +57,12 @@ def main():
         st.success("오늘 점약 데이터 초기화 완료")
         st.stop()
 
+    if reset_v == "all":
+        db.reset_all_data()
+        st.query_params.clear()
+        st.success("전체 DB 초기화 완료 (가입/히스토리 모두 삭제)")
+        st.stop()
+
     st.title(f"Enmover Lunch Buddy 오늘 점심 드실분? ({today_kor})")
     st.caption(f"오늘 날짜: {today_str}")
     st.markdown("---")

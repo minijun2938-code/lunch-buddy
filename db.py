@@ -213,6 +213,32 @@ def get_connection():
     return sqlite3.connect(DB_NAME)
 
 
+def reset_all_data():
+    """Delete ALL app data (users + history). Keeps tables."""
+    conn = get_connection()
+    c = conn.cursor()
+    # order matters due to references
+    for tbl in [
+        "requests",
+        "auth_sessions",
+        "group_members",
+        "lunch_groups",
+        "daily_status",
+        "users",
+    ]:
+        try:
+            c.execute(f"DELETE FROM {tbl}")
+        except Exception:
+            pass
+    conn.commit()
+    try:
+        c.execute("VACUUM")
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
+
+
 def reset_today_data():
     """Delete today's requests/status/groups for a clean test run (KST-based).
 
