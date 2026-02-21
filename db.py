@@ -269,6 +269,19 @@ def update_status(user_id, status):
     conn.commit()
     conn.close()
 
+    # If user is no longer hosting, remove their group listing for today.
+    if status != "Hosting":
+        delete_group(user_id)
+
+
+def delete_group(host_user_id: int):
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM lunch_groups WHERE date=? AND host_user_id=?", (today, host_user_id))
+    conn.commit()
+    conn.close()
+
 
 def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: str):
     today = datetime.date.today().isoformat()
@@ -286,6 +299,7 @@ def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: st
 
 
 def get_groups_today():
+    """Return only groups whose host's current status is Hosting."""
     today = datetime.date.today().isoformat()
     conn = get_connection()
     c = conn.cursor()
@@ -294,7 +308,8 @@ def get_groups_today():
         SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
         FROM lunch_groups g
         JOIN users u ON u.user_id = g.host_user_id
-        WHERE g.date=?
+        JOIN daily_status ds ON ds.user_id = g.host_user_id AND ds.date = g.date
+        WHERE g.date=? AND ds.status='Hosting'
         ORDER BY g.id DESC
         """,
         (today,),

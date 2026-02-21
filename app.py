@@ -203,6 +203,33 @@ def main():
                 st.write(f"**남은 자리:** {seats_left}")
                 st.write(f"**메뉴:** {menu or '-'}")
 
+                # Join request button
+                if host_uid != user_id:
+                    existing_req = db.get_pending_request_between(user_id, host_uid)
+                    disabled = bool(existing_req and existing_req[1] == "pending")
+
+                    if st.button(
+                        "🙋 저요!저요!",
+                        key=f"join_{gid}",
+                        disabled=disabled,
+                        use_container_width=True,
+                    ):
+                        req_id = db.create_request(user_id, host_uid)
+                        if not req_id:
+                            st.warning("이미 오늘 같은 요청을 보냈어요.")
+                        else:
+                            # Optional telegram notify host
+                            host = db.get_user_by_id(host_uid)
+                            host_chat = host[2] if host else None
+                            bot.send_telegram_msg(host_chat, f"🙋 [Lunch Buddy] {current_user}님이 '{host_name}' 팀에 합류 요청했어요! (앱에서 확인)")
+                            st.success("요청 보냈어요! 양쪽 상태는 '점약 잡는 중'으로 바뀌었어요.")
+                            st.rerun()
+
+                    if disabled:
+                        st.caption("이미 요청을 보냈어요(대기중).")
+                else:
+                    st.caption("(내가 만든 모집글)")
+
     st.markdown("---")
 
     # Section B: Free people
