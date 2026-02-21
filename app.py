@@ -249,29 +249,32 @@ def main():
                 if not chat_rows:
                     st.caption("아직 대화가 없어요.")
                 else:
-                    # One stable scroll area (chat_message + nested containers can behave oddly)
+                    # Scroll to bottom on each rerun (JS inside iframe)
                     import html as _html
-                    with st.container(height=280, border=True):
-                        items = []
-                        for _uid, uname, msg, ts in chat_rows[-50:]:
-                            items.append(
-                                f"<div class='lb-chat-item'>"
-                                f"<div class='lb-chat-meta'><b>{_html.escape(str(uname))}</b> · {_html.escape(str(ts))}</div>"
-                                f"<div class='lb-chat-msg'>{_html.escape(str(msg))}</div>"
-                                f"</div>"
-                            )
-
-                        st.markdown(
-                            """
-<style>
-.lb-chat-item{padding:6px 8px;border-bottom:1px solid rgba(49,51,63,0.12);}
-.lb-chat-meta{font-size:12px;opacity:0.75;line-height:1.15;margin-bottom:2px;}
-.lb-chat-msg{font-size:14px;line-height:1.25;margin:0;}
-</style>
-"""
-                            + "\n".join(items),
-                            unsafe_allow_html=True,
+                    items = []
+                    for _uid, uname, msg, ts in chat_rows[-80:]:
+                        items.append(
+                            f"<div class='lb-chat-item'>"
+                            f"<div class='lb-chat-meta'><b>{_html.escape(str(uname))}</b> · {_html.escape(str(ts))}</div>"
+                            f"<div class='lb-chat-msg'>{_html.escape(str(msg))}</div>"
+                            f"</div>"
                         )
+
+                    chat_html = f"""
+<div id='lb-chat-box' style='height:280px; overflow-y:auto; border:1px solid rgba(49,51,63,0.18); border-radius:8px;'>
+  {''.join(items)}
+</div>
+<style>
+.lb-chat-item{{padding:6px 8px;border-bottom:1px solid rgba(49,51,63,0.12);}}
+.lb-chat-meta{{font-size:12px;opacity:0.75;line-height:1.15;margin-bottom:2px;}}
+.lb-chat-msg{{font-size:14px;line-height:1.25;margin:0;}}
+</style>
+<script>
+  const el = document.getElementById('lb-chat-box');
+  if (el) {{ el.scrollTop = el.scrollHeight; }}
+</script>
+"""
+                    st.components.v1.html(chat_html, height=300)
 
                 text = st.chat_input("메시지 입력…")
                 if text:
