@@ -433,9 +433,20 @@ def main():
                             db.update_request_status(req_id, "accepted")
 
                             if group_host_user_id:
-                                ok_add, err_add = db.add_member_to_group(int(group_host_user_id), user_id, current_user)
+                                host_id = int(group_host_user_id)
+                                # Two cases:
+                                # 1) I'm the host receiving a join request (from_uid wants to join my group)
+                                # 2) I'm receiving a group invite (I want to join host_id's group)
+                                if host_id == int(user_id):
+                                    target_uid = int(from_uid)
+                                    target_name = from_name
+                                else:
+                                    target_uid = int(user_id)
+                                    target_name = current_user
+
+                                ok_add, err_add = db.add_member_to_group(host_id, target_uid, target_name)
                                 if ok_add:
-                                    db.set_booked_for_group(int(group_host_user_id))
+                                    db.set_booked_for_group(host_id)
                                 else:
                                     st.warning(err_add or "그룹 합류 처리 실패")
                             else:
