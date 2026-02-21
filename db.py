@@ -202,6 +202,19 @@ def init_db():
 def get_connection():
     return sqlite3.connect(DB_NAME)
 
+
+def reset_today_data():
+    """Delete today's requests/status/groups for a clean test run."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM requests WHERE date=?", (today,))
+    c.execute("DELETE FROM daily_status WHERE date=?", (today,))
+    c.execute("DELETE FROM group_members WHERE date=?", (today,))
+    c.execute("DELETE FROM lunch_groups WHERE date=?", (today,))
+    conn.commit()
+    conn.close()
+
 def register_user(
     *,
     username: str,
