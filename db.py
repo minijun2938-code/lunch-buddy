@@ -388,8 +388,12 @@ def has_accepted_today(user_id: int) -> bool:
 
 
 def reconcile_user_today(user_id: int):
-    """Make Booked highest priority if any accepted invite exists today."""
-    if has_accepted_today(user_id):
+    """Make Booked highest priority if any accepted invite exists today.
+
+    Important: don't re-apply Booked on every rerun, because update_status(Booked)
+    cancels pending requests.
+    """
+    if has_accepted_today(user_id) and get_status_today(user_id) != "Booked":
         update_status(user_id, "Booked")
 
 def get_user_by_employee_id(employee_id: str):
@@ -1202,7 +1206,11 @@ def update_request_status(request_id, status):
 
 
 def cancel_pending_requests_for_user(user_id: int):
-    """When user is Booked, cancel all other pending invites involving them today."""
+    """When user is Booked, cancel other pending invites involving them today.
+
+    Exception: if the user is hosting a group, allow pending join requests to that
+    group (group_host_user_id == user_id) to stay pending.
+    """
     today = datetime.date.today().isoformat()
     conn = get_connection()
     c = conn.cursor()
@@ -1210,9 +1218,12 @@ def cancel_pending_requests_for_user(user_id: int):
         """
         UPDATE requests
         SET status='cancelled'
-        WHERE date=? AND status='pending' AND (from_user_id=? OR to_user_id=?)
+        WHERE date=?
+          AND status='pending'
+          AND (from_user_id=? OR to_user_id=?)
+          AND COALESCE(group_host_user_id, -1) != ?
         """,
-        (today, user_id, user_id),
+        (today, user_id, user_id, user_id),
     )
     conn.commit()
     conn.close()
