@@ -425,9 +425,11 @@ def main():
                 st.caption(f"상태: {pretty_status(status)} · {ts}")
 
                 if status == "pending":
+                    # If I'm already planning (I sent/received another request), block accepting others
+                    accept_disabled = (db.get_status_today(user_id) == "Planning")
                     a, b = st.columns(2)
                     with a:
-                        if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True):
+                        if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True, disabled=accept_disabled):
                             db.update_request_status(req_id, "accepted")
 
                             if group_host_user_id:
