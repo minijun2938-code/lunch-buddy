@@ -1,6 +1,12 @@
 import datetime
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
+
+# Optional dependency
+try:
+    from streamlit_autorefresh import st_autorefresh
+except Exception:  # pragma: no cover
+    def st_autorefresh(*args, **kwargs):
+        return None
 
 import lunch_bot as bot
 import db
@@ -8,8 +14,9 @@ import db
 # --- Init ---
 db.init_db()
 
-today = datetime.date.today()
-today_str = today.isoformat()
+# Use KST date to avoid UTC drift on Streamlit Cloud
+today_str = db.kst_today_iso()
+today = datetime.date.fromisoformat(today_str)
 today_kor = f"{today.month}월 {today.day}일"
 
 APP_VERSION = "2026-02-21.13"
