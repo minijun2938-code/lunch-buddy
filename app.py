@@ -2,7 +2,7 @@ import datetime
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-import bot
+import lunch_bot as bot
 import db
 
 # --- Init ---
