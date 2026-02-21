@@ -435,8 +435,9 @@ def main():
                 st.caption(f"상태: {pretty_status(status)} · {ts}")
 
                 if status == "pending":
-                    # Accept should always be possible unless already Booked
-                    accept_disabled = (db.get_status_today(user_id) == "Booked")
+                    # Accept should be possible even if I'm Booked when I'm the host receiving join requests
+                    is_join_to_my_group = bool(group_host_user_id) and int(group_host_user_id) == int(user_id)
+                    accept_disabled = (db.get_status_today(user_id) == "Booked") and (not is_join_to_my_group)
                     a, b = st.columns(2)
                     with a:
                         if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True, disabled=accept_disabled):
