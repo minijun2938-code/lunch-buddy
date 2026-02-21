@@ -170,6 +170,7 @@ def main():
             "Free": "점약 없어요(불러주세요) 🟢",
             "Hosting": "오늘 점심 같이 드실분? 모집중 🧑‍🍳",
             "Planning": "점약 잡는 중 🟠",
+            "Skip": "오늘은 넘어갈게요 (미참여) 🙅",
             "Not Set": "아직 미설정",
         }.get(my_status, my_status)
         st.info(f"현재 내 상태: **{status_text}**")
@@ -196,7 +197,7 @@ def main():
 
     # --- Status buttons ---
     st.subheader("👋 오늘 상태는?")
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
 
     if my_status == "Booked":
         st.caption("⚠️ 이미 점심약속이 있는것 같아요! (오늘은 변경/요청이 제한돼요)")
@@ -215,6 +216,15 @@ def main():
             st.caption("(팀원/팀장은 '불러주세요'를 사용할 수 없어요)")
 
     with c2:
+        if st.button(
+            "🙅 오늘은 넘어갈게요 (미참여)",
+            use_container_width=True,
+            disabled=(db.get_status_today(user_id) == "Booked"),
+        ):
+            db.update_status(user_id, "Skip")
+            st.rerun()
+
+    with c3:
         if st.button(
             "🧑‍🍳 오늘 점심 같이 드실분?",
             use_container_width=True,
