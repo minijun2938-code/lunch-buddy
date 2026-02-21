@@ -244,37 +244,21 @@ def register_user(
         conn.close()
 
 
-def get_or_create_user_simple(*, employee_id: str, username: str) -> tuple[bool, tuple | None, str | None]:
-    """MVP: no password. Identify user by employee_id (unique) + display name."""
+def verify_login(employee_id: str, pin: str) -> tuple[bool, tuple | None]:
+    """PIN-based login (4 digits). Returns (ok, user_row)."""
     employee_id = (employee_id or "").strip().lower()
-    username = (username or "").strip()
-    import re
-
-    if not re.fullmatch(r"[a-z]{2}\d{5}", employee_id):
-        return False, None, "사번은 영문자 2개 + 숫자 5개 형식이어야 합니다. (예: sl55555)"
-    if not username:
-        return False, None, "이름을 입력해주세요."
-
     user = get_user_by_employee_id(employee_id)
-    if user:
-        return True, user, None
+    if not user:
+        return False, None
 
-    conn = get_connection()
-    c = conn.cursor()
-    try:
-        c.execute(
-            "INSERT INTO users (username, employee_id) VALUES (?, ?)",
-            (username, employee_id),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        user = get_user_by_employee_id(employee_id)
-        return (True, user, None) if user else (False, None, "가입 실패")
-    finally:
-        conn.close()
+    user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, salt, pin_hash = user
+    if not (pin.isdigit() and len(pin) == 4):
+        return False, None
 
-    user = get_user_by_employee_id(employee_id)
-    return True, user, None
+    if _hash_pin(emp_id or employee_id, pin, salt or "") != (pin_hash or ""):
+        return False, None
+
+    return True, user
 
 
 def update_user_chat_id(user_id, chat_id):

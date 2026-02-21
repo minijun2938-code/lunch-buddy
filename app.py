@@ -1,104 +1,136 @@
-import streamlit as st
 import datetime
-import db
-import bot
+import streamlit as st
 
-# Initialize DB on first run
-# (Streamlit Cloud may reset local filesystem; treat this as MVP)
+import bot
+import db
+
+# --- Init ---
 db.init_db()
 
-# Daily reset is already implicit because all reads/writes are scoped by `date=today`.
-# We keep DB history, but every new day starts clean in the UI.
-
-today_str = datetime.date.today().isoformat()
+today = datetime.date.today()
+today_str = today.isoformat()
+today_kor = f"{today.month}월 {today.day}일"
 
 st.set_page_config(page_title=f"Lunch Buddy 🍱 ({today_str})", layout="wide")
 
 
-def _load_user_from_query():
+def _auto_login_from_query():
+    """MVP convenience: if ?emp=sl12345 exists and user exists, auto-enter.
+
+    NOTE: This bypasses PIN on refresh. OK for MVP/internal use.
+    """
+    if "user" in st.session_state:
+        return
+
     emp = st.query_params.get("emp")
     if not emp:
         return
+
     u = db.get_user_by_employee_id(str(emp).strip().lower())
     if not u:
         return
+
     user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
     st.session_state["user"] = {
         "user_id": user_id,
         "username": username,
         "employee_id": emp_id,
         "telegram_chat_id": telegram_chat_id,
+        "team": team,
+        "mbti": mbti,
+        "age": age,
+        "years": years,
     }
 
 
-if "user" not in st.session_state:
-    _load_user_from_query()
+_auto_login_from_query()
 
 
 def main():
-    st.title(f"🍱 {today_str} 오늘 점심 같이 드실분?")
+    st.title(f"Enmover Lunch Buddy 오늘 점심 드실분? ({today_kor})")
+    st.caption(f"오늘 날짜: {today_str}")
     st.markdown("---")
 
-    # --- MVP Entrance (Sidebar) ---
+    # --- Auth (sidebar) ---
     with st.sidebar:
-        st.header("👤 입장")
+        st.header("🔐 회원가입 / 로그인")
 
         if "user" in st.session_state:
-            st.success(f"입장됨: {st.session_state['user']['username']} ({st.session_state['user']['employee_id']})")
-            if st.button("나가기"):
+            u = st.session_state["user"]
+            st.success(f"로그인됨: {u['username']} ({u['employee_id']})")
+            if st.button("로그아웃"):
                 st.query_params.clear()
                 del st.session_state["user"]
                 st.rerun()
         else:
-            emp = st.text_input("사번 (예: sl55555)")
-            name = st.text_input("이름")
-            if st.button("입장하기", use_container_width=True):
-                ok, user, err = db.get_or_create_user_simple(employee_id=emp, username=name)
-                if not ok:
-                    st.error(err or "입장 실패")
-                else:
-                    user_id, username, telegram_chat_id, *_rest = user
-                    st.session_state["user"] = {
-                        "user_id": user_id,
-                        "username": username,
-                        "employee_id": emp.strip().lower(),
-                        "telegram_chat_id": telegram_chat_id,
-                    }
-                    # Persist across refresh via URL param (Safari-safe)
-                    st.query_params["emp"] = emp.strip().lower()
-                    st.rerun()
+            tab_login, tab_signup = st.tabs(["로그인", "회원가입"])
+
+            with tab_login:
+                employee_id = st.text_input("사번 (예: sl55555)")
+                pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password")
+
+                if st.button("로그인", use_container_width=True):
+                    ok, user = db.verify_login(employee_id, pin)
+                    if not ok:
+                        st.error("사번 또는 비밀번호가 올바르지 않습니다.")
+                    else:
+                        user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = user
+                        st.session_state["user"] = {
+                            "user_id": user_id,
+                            "username": username,
+                            "employee_id": emp_id,
+                            "telegram_chat_id": telegram_chat_id,
+                            "team": team,
+                            "mbti": mbti,
+                            "age": age,
+                            "years": years,
+                        }
+                        # Safari-safe persistence via URL
+                        st.query_params["emp"] = emp_id
+                        st.rerun()
+
+            with tab_signup:
+                st.caption("사번은 영문 2개 + 숫자 5개 (예: sl55555), 비밀번호는 숫자 4자리")
+                su_name = st.text_input("이름")
+                su_team = st.text_input("팀명")
+                su_mbti = st.text_input("MBTI")
+                su_age = st.number_input("나이", min_value=0, max_value=120, value=30, step=1)
+                su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1)
+                su_emp = st.text_input("사번 (예: sl55555)")
+                su_pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password")
+                su_pin2 = st.text_input("비밀번호 확인", type="password")
+
+                if st.button("회원가입", use_container_width=True):
+                    if su_pin != su_pin2:
+                        st.error("비밀번호가 일치하지 않습니다.")
+                    else:
+                        ok, err = db.register_user(
+                            username=su_name.strip(),
+                            team=su_team.strip(),
+                            mbti=su_mbti.strip().upper(),
+                            age=int(su_age),
+                            years=int(su_years),
+                            employee_id=su_emp.strip().lower(),
+                            pin=su_pin.strip(),
+                        )
+                        if ok:
+                            st.success("회원가입 완료! 이제 로그인 해주세요.")
+                        else:
+                            st.error(err or "회원가입 실패")
 
     if "user" not in st.session_state:
-        st.info("왼쪽에서 사번+이름 입력하고 입장해줘.")
+        st.info("왼쪽에서 로그인해줘.")
         st.stop()
 
     user_id = st.session_state["user"]["user_id"]
     current_user = st.session_state["user"]["username"]
 
-    # Priority rule: if any accepted invite exists today, treat as Booked (overrides Planning)
+    # Priority: accepted -> Booked
     db.reconcile_user_today(user_id)
 
-    # --- Status Setting (one lunch per day rule) ---
-    st.subheader(f"👋 {current_user}님의 오늘 상태")
-
+    # --- My status ---
+    st.subheader("🙋 내 현황")
     my_status = db.get_status_today(user_id)
-
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("🟢 점약 없어요 불러주세요", use_container_width=True, disabled=(my_status == "Booked")):
-            db.update_status(user_id, "Free")
-            st.rerun()
-
-    with c2:
-        if st.button("🧑‍🍳 우리쪽에 합류하실분?", use_container_width=True, disabled=(my_status == "Booked")):
-            # Block if already member of any group today
-            if db.get_groups_for_user_today(user_id):
-                st.warning("이미 점심약속이 있는것 같아요!")
-            else:
-                db.update_status(user_id, "Hosting")
-                st.rerun()
-
-    # status line under buttons
     status_text = {
         "Booked": "점약 있어요 🎉",
         "Free": "점약 없어요(불러주세요) 🟢",
@@ -106,17 +138,43 @@ def main():
         "Planning": "점약 잡는 중 🟠",
         "Not Set": "아직 미설정",
     }.get(my_status, my_status)
-    st.caption(f"오늘 상태: {status_text}")
+    st.info(f"현재 내 상태: **{status_text}**")
+
+    # --- Status buttons ---
+    st.subheader("👋 오늘 상태는?")
+    c1, c2 = st.columns(2)
+
     if my_status == "Booked":
         st.caption("⚠️ 이미 점심약속이 있는것 같아요! (오늘은 변경/요청이 제한돼요)")
 
-    # Hosting extra inputs
+    with c1:
+        if st.button(
+            "🟢 점약 없어요 불러주세요",
+            use_container_width=True,
+            disabled=(db.get_status_today(user_id) == "Booked"),
+        ):
+            db.update_status(user_id, "Free")
+            st.rerun()
+
+    with c2:
+        if st.button(
+            "🧑‍🍳 오늘 점심 같이 드실분?",
+            use_container_width=True,
+            disabled=(db.get_status_today(user_id) == "Booked"),
+        ):
+            if db.get_groups_for_user_today(user_id):
+                st.warning("이미 점심약속이 있는것 같아요!")
+            else:
+                db.update_status(user_id, "Hosting")
+                st.rerun()
+
+    # Hosting inputs
     if db.get_status_today(user_id) == "Hosting":
         st.markdown("### 🧑‍🍳 합류 모집 정보")
         with st.form("hosting_form"):
             member_names = st.text_input("현재 멤버(이름)", value=current_user)
             seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1)
-            menu = st.text_input("메뉴", placeholder="예: 김치찌개 / 샐러드 / 파스타")
+            menu = st.text_input("메뉴")
             submitted = st.form_submit_button("저장")
 
         if submitted:
@@ -125,7 +183,7 @@ def main():
 
     st.markdown("---")
 
-    # --- Requests (Inbox/Outbox/Stats) ---
+    # --- Requests ---
     def pretty_status(status: str) -> str:
         if status == "pending":
             return "대기중…"
@@ -140,7 +198,7 @@ def main():
     incoming = db.list_incoming_requests(user_id)
     outgoing = db.list_outgoing_requests(user_id)
 
-    confirmed = [row for row in incoming if row[3] == "accepted"] + [row for row in outgoing if row[3] == "accepted"]
+    confirmed = [r for r in incoming if r[3] == "accepted"] + [r for r in outgoing if r[3] == "accepted"]
     st.subheader("📊 오늘 점심 성사")
     st.metric("성사 건수", len(confirmed))
 
@@ -159,7 +217,6 @@ def main():
                         if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True):
                             db.update_request_status(req_id, "accepted")
 
-                            # If this request targets a group host, add member there.
                             if group_host_user_id:
                                 ok_add, err_add = db.add_member_to_group(int(group_host_user_id), from_uid, from_name)
                                 if ok_add:
@@ -167,11 +224,8 @@ def main():
                                 else:
                                     st.warning(err_add or "그룹 합류 처리 실패")
                             else:
-                                # 1:1
                                 db.update_status(user_id, "Booked")
                                 db.update_status(from_uid, "Booked")
-                                db.cancel_pending_requests_for_user(user_id)
-                                db.cancel_pending_requests_for_user(from_uid)
 
                             sender = db.get_user_by_id(from_uid)
                             if sender and sender[2]:
@@ -188,7 +242,7 @@ def main():
     if not outgoing:
         st.caption("아직 보낸 초대가 없어요.")
     else:
-        for req_id, to_uid, to_name, status, ts, group_host_user_id in outgoing:
+        for req_id, to_uid, to_name, status, ts, _group_host_user_id in outgoing:
             with st.container(border=True):
                 st.write(f"나 → **{to_name}**")
                 st.caption(f"상태: {pretty_status(status)} · {ts}")
@@ -205,8 +259,7 @@ def main():
     all_statuses = db.get_all_statuses()
     others = [s for s in all_statuses if s[0] != user_id]
 
-    # Groups to join
-    st.markdown("### 🧑‍🍳 우리쪽에 합류하실분?")
+    st.markdown("### 🧑‍🍳 오늘 점심 같이 드실분?")
     groups = db.get_groups_today()
     joinable = [g for g in groups if g[4] is None or int(g[4]) > 0]
     if not joinable:
@@ -230,7 +283,6 @@ def main():
 
     st.markdown("---")
 
-    # Free list
     st.markdown("### 🟢 점약 없어요 불러주세요")
     free_people = [o for o in others if o[2] == "Free"]
     if not free_people:
