@@ -2,9 +2,47 @@ import streamlit as st
 import datetime
 import db
 import bot
+from streamlit_cookies_manager import EncryptedCookieManager
+
+
+def get_cookie_manager():
+    password = None
+    try:
+        password = st.secrets.get("COOKIE_PASSWORD")
+    except Exception:
+        password = None
+
+    if not password:
+        password = "lunch-buddy-dev-cookie-password"
+
+    cookies = EncryptedCookieManager(prefix="lunch_buddy_", password=password)
+    if not cookies.ready():
+        st.stop()
+    return cookies
 
 # Initialize DB on first run
 db.init_db()
+
+# Cookies (persist login)
+cookies = get_cookie_manager()
+
+# Auto-login from cookie if session_state empty
+if "user" not in st.session_state:
+    token = cookies.get("session_token")
+    if token:
+        row = db.get_user_by_session_token(token)
+        if row:
+            user_id, username, telegram_chat_id, team, mbti, age, years, emp_id = row
+            st.session_state["user"] = {
+                "user_id": user_id,
+                "username": username,
+                "employee_id": emp_id,
+                "team": team,
+                "mbti": mbti,
+                "age": age,
+                "years": years,
+                "telegram_chat_id": telegram_chat_id,
+            }
 
 st.set_page_config(page_title="Lunch Buddy 🍱", layout="wide")
 
@@ -19,6 +57,12 @@ def main():
         if "user" in st.session_state:
             st.success(f"로그인됨: {st.session_state['user']['username']}")
             if st.button("로그아웃"):
+                # clear cookie + db session
+                token = cookies.get("session_token")
+                if token:
+                    db.delete_auth_session(token)
+                cookies["session_token"] = ""
+                cookies.save()
                 del st.session_state["user"]
                 st.rerun()
         else:
@@ -42,6 +86,9 @@ def main():
                             "years": years,
                             "telegram_chat_id": telegram_chat_id,
                         }
+                        token = db.create_auth_session(user_id)
+                        cookies["session_token"] = token
+                        cookies.save()
                         st.rerun()
                     else:
                         st.error("사번 또는 비밀번호가 올바르지 않습니다.")
@@ -214,15 +261,19 @@ def main():
                         disabled=disabled,
                         use_container_width=True,
                     ):
-                        req_id = db.create_request(user_id, host_uid)
-                        if not req_id:
-                            st.warning("이미 오늘 같은 요청을 보냈어요.")
+                        ok_add, err_add = db.add_member_to_group(host_uid, current_user)
+                        if not ok_add:
+                            st.warning(err_add or "멤버 추가 실패")
                         else:
-                            # Optional telegram notify host
-                            host = db.get_user_by_id(host_uid)
-                            host_chat = host[2] if host else None
-                            bot.send_telegram_msg(host_chat, f"🙋 [Lunch Buddy] {current_user}님이 '{host_name}' 팀에 합류 요청했어요! (앱에서 확인)")
-                            st.success("요청 보냈어요! 양쪽 상태는 '점약 잡는 중'으로 바뀌었어요.")
+                            req_id = db.create_request(user_id, host_uid)
+                            if not req_id:
+                                st.warning("이미 오늘 같은 요청을 보냈어요.")
+                            else:
+                                # Optional telegram notify host
+                                host = db.get_user_by_id(host_uid)
+                                host_chat = host[2] if host else None
+                                bot.send_telegram_msg(host_chat, f"🙋 [Lunch Buddy] {current_user}님이 '{host_name}' 팀에 합류 요청했어요! (앱에서 확인)")
+                                st.success("요청 보냈어요! (현재 멤버에 추가됨)")
                             st.rerun()
 
                     if disabled:

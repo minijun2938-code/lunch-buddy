@@ -120,6 +120,18 @@ def init_db():
            ON lunch_groups(date)"""
     )
 
+    # Auth sessions (remember login across refresh)
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS auth_sessions
+                 (token TEXT PRIMARY KEY,
+                  user_id INTEGER,
+                  created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'''
+    )
+    c.execute(
+        """CREATE INDEX IF NOT EXISTS idx_auth_sessions_user
+           ON auth_sessions(user_id)"""
+    )
+
     # Requests table
     # status: pending | accepted | declined | cancelled
     c.execute(
@@ -317,6 +329,81 @@ def get_groups_today():
     rows = c.fetchall()
     conn.close()
     return rows
+
+
+def add_member_to_group(host_user_id: int, member_name: str) -> tuple[bool, str | None]:
+    """Append member name to today's host group and decrement seats_left if possible."""
+    today = datetime.date.today().isoformat()
+    member_name = (member_name or "").strip()
+    if not member_name:
+        return False, "member_name이 비어있습니다."
+
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "SELECT member_names, seats_left FROM lunch_groups WHERE date=? AND host_user_id=?",
+            (today, host_user_id),
+        )
+        row = c.fetchone()
+        if not row:
+            return False, "모집글을 찾지 못했어요."
+
+        member_names, seats_left = row
+        seats_left = int(seats_left) if seats_left is not None else 0
+
+        names = [n.strip() for n in (member_names or "").split(",") if n.strip()]
+        if member_name in names:
+            return True, None
+
+        if seats_left <= 0:
+            return False, "남은 자리가 없어요."
+
+        names.append(member_name)
+        new_member_names = ", ".join(names)
+        c.execute(
+            "UPDATE lunch_groups SET member_names=?, seats_left=? WHERE date=? AND host_user_id=?",
+            (new_member_names, seats_left - 1, today, host_user_id),
+        )
+        conn.commit()
+        return True, None
+    finally:
+        conn.close()
+
+
+def create_auth_session(user_id: int) -> str:
+    token = secrets.token_hex(24)
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO auth_sessions (token, user_id) VALUES (?, ?)", (token, user_id))
+    conn.commit()
+    conn.close()
+    return token
+
+
+def get_user_by_session_token(token: str):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT u.user_id, u.username, u.telegram_chat_id, u.team, u.mbti, u.age, u.years, u.employee_id
+        FROM auth_sessions s
+        JOIN users u ON u.user_id = s.user_id
+        WHERE s.token=?
+        """,
+        (token,),
+    )
+    row = c.fetchone()
+    conn.close()
+    return row
+
+
+def delete_auth_session(token: str):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM auth_sessions WHERE token=?", (token,))
+    conn.commit()
+    conn.close()
 
 def get_all_statuses():
     today = datetime.date.today().isoformat()
