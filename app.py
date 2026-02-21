@@ -91,11 +91,11 @@ def main():
                     gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = groups[0]
                     members = db.list_group_members(host_uid, sel)
                     st.write(f"**{sel} 점심 기록**")
-                    st.write(f"멤버: {', '.join([n for _uid, n in members]) if members else (member_names or '-')}")
+                    st.write(f"멤버: {', '.join([db.format_name(n, en) for _uid, n, en in members]) if members else (member_names or '-')}")
                     st.write(f"메뉴: {menu or '-'}")
                     if payer_name:
                         st.write(f"내가쏜다: {payer_name} 💳")
-                    st.caption(f"호스트: {host_name}")
+                    st.caption(f"호스트: {db.get_display_name(host_uid)}")
                 else:
                     st.caption("해당 날짜 기록이 없어요.")
             else:
@@ -229,7 +229,7 @@ def main():
             gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
             st.markdown("**오늘 점약 상세**" if my_status == "Booked" else "**오늘 같이 먹는 멤버**")
             members = db.list_group_members(host_uid, today_str)
-            st.write(", ".join([name for _uid, name in members]) if members else (member_names or "-"))
+            st.write(", ".join([db.format_name(name, en) for _uid, name, en in members]) if members else (member_names or "-"))
             # Menu editable box
             with st.expander("🍽️ 메뉴/쏘는사람 수정", expanded=False):
                 new_menu = st.text_input("메뉴", value=(menu or ""), key=f"menu_edit_{host_uid}")
@@ -243,7 +243,7 @@ def main():
             st.markdown(f"**메뉴:** {menu or '-'}")
             if payer_name:
                 st.markdown(f"**내가쏜다:** {payer_name} 💳")
-            st.caption(f"호스트: {host_name}")
+            st.caption(f"호스트: {db.get_display_name(host_uid)}")
 
             # --- Members-only chat ---
             with st.expander("💬 멤버 채팅 (메뉴/시간 정하기)", expanded=True):
@@ -303,7 +303,7 @@ def main():
                         gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
                         st.markdown("**오늘 점약 상세**")
                         members = db.list_group_members(host_uid, today_str)
-                        st.write("함께: " + (", ".join([name for _uid, name in members]) if members else (member_names or "-")))
+                        st.write("함께: " + (", ".join([db.format_name(name, en) for _uid, name, en in members]) if members else (member_names or "-")))
                         st.markdown(f"**메뉴:** {menu or '-'}")
                         if payer_name:
                             st.markdown(f"**내가쏜다:** {payer_name} 💳")
@@ -428,7 +428,8 @@ def main():
                     if g:
                         _gid, _d, _host_uid, host_name, member_names, seats_left, menu, payer_name = g
                         extra = f" | 내가쏜다: {payer_name} 💳" if payer_name else ""
-                        st.caption(f"초대 팀: {host_name} | 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}{extra}")
+                        host_disp = db.get_display_name(int(group_host_user_id))
+                        st.caption(f"초대 팀: {host_disp} | 멤버: {member_names or '-'} | 남은 자리: {seats_left} | 메뉴: {menu or '-'}{extra}")
                 else:
                     st.write(f"**{from_name}** → 나")
 
@@ -532,7 +533,7 @@ def main():
     else:
         for gid, host_uid, host_name, member_names, seats_left, menu, payer_name in joinable:
             with st.container(border=True):
-                st.write(f"**호스트:** {host_name}")
+                st.write(f"**호스트:** {db.get_display_name(host_uid)}")
                 st.write(f"**현재 멤버:** {member_names or '-'}")
                 st.write(f"**남은 자리:** {seats_left}")
                 st.write(f"**메뉴:** {menu or '-'}")
@@ -564,7 +565,9 @@ def main():
             is_me = (uid == user_id)
             with cols[i % 4]:
                 with st.container(border=True):
-                    st.markdown(f"### {uname}" + (" (나)" if is_me else ""))
+                    # uname here is not guaranteed to include english_name; recompute for consistency
+                    disp = db.get_display_name(uid)
+                    st.markdown(f"### {disp}" + (" (나)" if is_me else ""))
 
                     if is_me:
                         st.caption("✅ 내가 '불러주세요'로 잘 표시되는지 확인용")

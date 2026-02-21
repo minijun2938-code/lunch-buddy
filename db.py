@@ -857,7 +857,7 @@ def list_group_members(host_user_id: int, date_str: str):
     c = conn.cursor()
     c.execute(
         """
-        SELECT u.user_id, u.username
+        SELECT u.user_id, u.username, u.english_name
         FROM group_members gm
         JOIN users u ON u.user_id = gm.user_id
         WHERE gm.date=? AND gm.host_user_id=?
@@ -873,8 +873,8 @@ def list_group_members(host_user_id: int, date_str: str):
 def _rebuild_group_legacy_fields(host_user_id: int, date_str: str):
     """Keep lunch_groups.member_names/member_user_ids in sync from normalized members."""
     members = list_group_members(host_user_id, date_str)
-    member_names = ", ".join([name for _uid, name in members])
-    member_user_ids = ",".join([str(uid) for uid, _name in members])
+    member_names = ", ".join([format_name(name, en) for _uid, name, en in members])
+    member_user_ids = ",".join([str(uid) for uid, _name, _en in members])
 
     conn = get_connection()
     c = conn.cursor()
