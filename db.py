@@ -416,7 +416,9 @@ def set_booked_for_group(host_user_id: int):
     ids = [x.strip() for x in (row[0] or "").split(",") if x.strip()]
     for uid in ids:
         try:
-            update_status(int(uid), "Booked")
+            uid_i = int(uid)
+            update_status(uid_i, "Booked")
+            cancel_pending_requests_for_user(uid_i)
         except Exception:
             continue
 
@@ -499,13 +501,31 @@ def get_all_statuses():
     conn.close()
     return results
 
+
+def get_status_today(user_id: int) -> str:
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COALESCE(status,'Not Set') FROM daily_status WHERE date=? AND user_id=?",
+        (today, user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else "Not Set"
+
 def create_request(from_user_id, to_user_id):
     """Create a lunch invite request for today.
 
-    Side effect (per spec): both requester and receiver become "Planning" automatically.
+    Rules:
+    - If either side is already Booked today, block.
+    - Side effect: both requester and receiver become "Planning".
 
-    Returns: request_id (int) on success, None on duplicate.
+    Returns: (request_id, error_message)
     """
+    if get_status_today(from_user_id) == "Booked" or get_status_today(to_user_id) == "Booked":
+        return None, "이미 점심약속이 있는것 같아요!"
+
     today = datetime.date.today().isoformat()
     conn = get_connection()
     c = conn.cursor()
@@ -517,20 +537,36 @@ def create_request(from_user_id, to_user_id):
         conn.commit()
         req_id = c.lastrowid
     except sqlite3.IntegrityError:
-        return None
+        return None, "이미 오늘 같은 요청을 보냈어요."
     finally:
         conn.close()
 
-    # Update statuses (separate connections) so we don't keep the request transaction open
     set_planning(from_user_id)
     set_planning(to_user_id)
-    return req_id
+    return req_id, None
 
 
 def update_request_status(request_id, status):
     conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE requests SET status=? WHERE id=?", (status, request_id))
+    conn.commit()
+    conn.close()
+
+
+def cancel_pending_requests_for_user(user_id: int):
+    """When user is Booked, cancel all other pending invites involving them today."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        UPDATE requests
+        SET status='cancelled'
+        WHERE date=? AND status='pending' AND (from_user_id=? OR to_user_id=?)
+        """,
+        (today, user_id, user_id),
+    )
     conn.commit()
     conn.close()
 

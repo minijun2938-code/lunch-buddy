@@ -214,17 +214,25 @@ def main():
 
     col1, col2 = st.columns(2)
 
+    # guard: one lunch per day
+    if db.get_status_today(user_id) == "Booked":
+        st.warning("이미 점심약속이 있는것 같아요!")
+
     with col1:
-        if st.button("🟢 점약 없어요 불러주세요", use_container_width=True):
+        if st.button("🟢 점약 없어요 불러주세요", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
             db.update_status(user_id, "Free")
             st.toast("상태 변경 완료: 점약 없음 🟢")
             st.rerun()
 
     with col2:
-        if st.button("🧑‍🍳 우리쪽에 합류하실분?", use_container_width=True):
-            db.update_status(user_id, "Hosting")
-            st.toast("상태 변경 완료: 합류 모집 중 🧑‍🍳")
-            st.rerun()
+        if st.button("🧑‍🍳 우리쪽에 합류하실분?", use_container_width=True, disabled=(db.get_status_today(user_id) == "Booked")):
+            # If I'm already a member of any group today, block hosting
+            if db.get_groups_for_user_today(user_id):
+                st.warning("이미 점심약속이 있는것 같아요!")
+            else:
+                db.update_status(user_id, "Hosting")
+                st.toast("상태 변경 완료: 합류 모집 중 🧑‍🍳")
+                st.rerun()
 
     # If hosting, show extra inputs
     my_status_row = [s for s in db.get_all_statuses() if s[0] == user_id]
@@ -401,11 +409,10 @@ def main():
                         disabled=disabled,
                         use_container_width=True,
                     ):
-                        req_id = db.create_request(user_id, host_uid)
+                        req_id, err = db.create_request(user_id, host_uid)
                         if not req_id:
-                            st.warning("이미 오늘 같은 요청을 보냈어요.")
+                            st.warning(err or "요청 실패")
                         else:
-                            # Optional telegram notify host
                             host = db.get_user_by_id(host_uid)
                             host_chat = host[2] if host else None
                             bot.send_telegram_msg(host_chat, f"🙋 [Lunch Buddy] {current_user}님이 '{host_name}' 팀에 합류 요청했어요! (앱에서 확인)")
@@ -444,9 +451,9 @@ def main():
                         disabled=disabled,
                         use_container_width=True,
                     ):
-                        req_id = db.create_request(user_id, uid)
+                        req_id, err = db.create_request(user_id, uid)
                         if not req_id:
-                            st.warning("이미 오늘 같은 요청을 보냈어요.")
+                            st.warning(err or "요청 실패")
                         else:
                             msg = (
                                 f"🍚 [Lunch Buddy] **{current_user}**님이 점심 같이 먹자고 요청했어요!\n\n"
