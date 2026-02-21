@@ -1,5 +1,6 @@
 import datetime
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 import bot
 import db
@@ -179,29 +180,15 @@ def main():
     if my_status == "Booked":
         st.markdown("## 점약 있어요 🎉")
 
-        # Buttons: detail toggle + cancel
-        if "show_booking_detail" not in st.session_state:
-            st.session_state["show_booking_detail"] = False
-
-        b1, b2 = st.columns([1, 1])
-        with b1:
-            if st.button(
-                "📄 상세보기" if not st.session_state["show_booking_detail"] else "📄 상세 숨기기",
-                use_container_width=True,
-            ):
-                st.session_state["show_booking_detail"] = not st.session_state["show_booking_detail"]
+        # Always show detail + chat (no toggle)
+        if st.button("🚫 점약 취소하기", type="primary"):
+            ok, err = db.cancel_booking_for_user(user_id)
+            if ok:
+                st.success("취소 완료")
+                st.session_state.pop("hosting_open", None)
                 st.rerun()
-
-        with b2:
-            if st.button("🚫 점약 취소하기", type="primary", use_container_width=True):
-                ok, err = db.cancel_booking_for_user(user_id)
-                if ok:
-                    st.success("취소 완료")
-                    st.session_state.pop("hosting_open", None)
-                    st.session_state["show_booking_detail"] = False
-                    st.rerun()
-                else:
-                    st.error(err or "취소 실패")
+            else:
+                st.error(err or "취소 실패")
     else:
         status_text = {
             "Free": "점약 없어요(불러주세요) 🟢",
@@ -212,8 +199,8 @@ def main():
         }.get(my_status, my_status)
         st.info(f"현재 내 상태: **{status_text}**")
 
-    # Show who/what
-    show_detail = (my_status != "Booked") or st.session_state.get("show_booking_detail", False)
+    # Show who/what (always when Booked)
+    show_detail = True
 
     if show_detail:
         my_groups_today = db.get_groups_for_user_today(user_id)
@@ -252,8 +239,8 @@ def main():
             with st.expander("💬 멤버 채팅 (메뉴/시간 정하기)", expanded=True):
                 realtime = st.toggle("실시간 업데이트(3초)", value=True, key=f"rt_{host_uid}")
                 if realtime:
-                    # simple page refresh polling
-                    st.components.v1.html("<meta http-equiv='refresh' content='3'>", height=0)
+                    # rerun without full page refresh; keeps widget/session state
+                    st_autorefresh(interval=3000, key=f"chat_refresh_{host_uid}")
 
                 chat_rows = db.list_group_chat(host_uid, today_str, limit=200)
                 if not chat_rows:

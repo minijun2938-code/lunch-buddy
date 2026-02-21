@@ -2,3 +2,4 @@ streamlit
 requests
 streamlit-cookies-manager
 streamlit-js-eval
+streamlit-autorefresh
