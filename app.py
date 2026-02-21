@@ -260,19 +260,28 @@ def main():
     incoming = db.list_incoming_requests(user_id)
     outgoing = db.list_outgoing_requests(user_id)
 
-    # Confirmed list (only for the current user)
+    # Confirmed list (for current user)
     confirmed = [
         ("incoming", *row) for row in incoming if row[3] == "accepted"
     ] + [
         ("outgoing", *row) for row in outgoing if row[3] == "accepted"
     ]
 
+    # If I'm in a group, show group members (multi-person)
+    my_groups = db.get_groups_for_user_today(user_id)
+
     st.subheader("📊 오늘 점심 성사")
     st.metric("성사 건수", len(confirmed))
 
-    # Show details only to the parties (which is the current user anyway)
     with st.expander("성사된 오늘의 점심 보기", expanded=False):
-        if not confirmed:
+        if my_groups:
+            for gid, host_uid, host_name, member_names, seats_left, menu in my_groups:
+                with st.container(border=True):
+                    st.write(f"**멤버:** {member_names or '-'}")
+                    if menu:
+                        st.write(f"**메뉴:** {menu}")
+                    st.caption(f"호스트: {host_name}")
+        elif not confirmed:
             st.caption("아직 성사된 약속이 없어요.")
         else:
             for direction, req_id, other_uid, other_name, status, ts in confirmed:
@@ -298,17 +307,22 @@ def main():
                         if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True):
                             db.update_request_status(req_id, "accepted")
 
+                            sender = db.get_user_by_id(from_uid)
+
                             # If I'm hosting today, accepting means the requester joins my group
-                            ok_add, _err_add = db.add_member_to_group(user_id, from_name)
+                            ok_add, _err_add = db.add_member_to_group(user_id, from_uid, from_name)
                             if ok_add:
                                 st.toast("현재 멤버에 추가했어요! (남은 자리 -1)")
+                                # Everyone in this group becomes Booked
+                                db.set_booked_for_group(user_id)
+                            else:
+                                # Not hosting / or no group: mark both sides Booked
+                                db.update_status(user_id, "Booked")
+                                db.update_status(from_uid, "Booked")
 
-                            sender = db.get_user_by_id(from_uid)
                             if sender and sender[2]:
                                 bot.send_telegram_msg(sender[2], f"✅ [Lunch Buddy] {current_user}님이 점심 초대를 수락했어요.")
 
-                            # If accepted, set my status to 'Booked'
-                            db.update_status(user_id, "Booked")
                             st.success("🍚👏 우리 같이 먹어요")
                             st.rerun()
                     with c2:

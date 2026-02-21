@@ -111,10 +111,17 @@ def init_db():
                   date TEXT,
                   host_user_id INTEGER,
                   member_names TEXT,
+                  member_user_ids TEXT,
                   seats_left INTEGER,
                   menu TEXT,
                   UNIQUE(date, host_user_id))'''
     )
+
+    # Migration: add member_user_ids if missing
+    c.execute("PRAGMA table_info(lunch_groups)")
+    gcols = {row[1] for row in c.fetchall()}
+    if "member_user_ids" not in gcols:
+        c.execute("ALTER TABLE lunch_groups ADD COLUMN member_user_ids TEXT")
     c.execute(
         """CREATE INDEX IF NOT EXISTS idx_groups_day
            ON lunch_groups(date)"""
@@ -296,15 +303,32 @@ def delete_group(host_user_id: int):
 
 
 def upsert_group(host_user_id: int, member_names: str, seats_left: int, menu: str):
+    """Upsert today's hosting group.
+
+    Ensures host_user_id is included in member_user_ids.
+    """
     today = datetime.date.today().isoformat()
+
+    # Ensure host is included in member_user_ids
     conn = get_connection()
     c = conn.cursor()
     c.execute(
+        "SELECT member_user_ids FROM lunch_groups WHERE date=? AND host_user_id=?",
+        (today, host_user_id),
+    )
+    row = c.fetchone()
+    existing_ids = row[0] if row else None
+    ids = [x.strip() for x in (existing_ids or "").split(",") if x.strip()]
+    if str(host_user_id) not in ids:
+        ids.insert(0, str(host_user_id))
+    member_user_ids = ",".join(ids)
+
+    c.execute(
         """
-        INSERT OR REPLACE INTO lunch_groups (id, date, host_user_id, member_names, seats_left, menu)
-        VALUES ((SELECT id FROM lunch_groups WHERE date=? AND host_user_id=?), ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO lunch_groups (id, date, host_user_id, member_names, member_user_ids, seats_left, menu)
+        VALUES ((SELECT id FROM lunch_groups WHERE date=? AND host_user_id=?), ?, ?, ?, ?, ?, ?)
         """,
-        (today, host_user_id, today, host_user_id, member_names, int(seats_left), menu),
+        (today, host_user_id, today, host_user_id, member_names, member_user_ids, int(seats_left), menu),
     )
     conn.commit()
     conn.close()
@@ -331,8 +355,8 @@ def get_groups_today():
     return rows
 
 
-def add_member_to_group(host_user_id: int, member_name: str) -> tuple[bool, str | None]:
-    """Append member name to today's host group and decrement seats_left if possible."""
+def add_member_to_group(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
+    """Append member (id+name) to today's host group and decrement seats_left if possible."""
     today = datetime.date.today().isoformat()
     member_name = (member_name or "").strip()
     if not member_name:
@@ -342,33 +366,87 @@ def add_member_to_group(host_user_id: int, member_name: str) -> tuple[bool, str 
     c = conn.cursor()
     try:
         c.execute(
-            "SELECT member_names, seats_left FROM lunch_groups WHERE date=? AND host_user_id=?",
+            "SELECT member_names, member_user_ids, seats_left FROM lunch_groups WHERE date=? AND host_user_id=?",
             (today, host_user_id),
         )
         row = c.fetchone()
         if not row:
             return False, "모집글을 찾지 못했어요."
 
-        member_names, seats_left = row
+        member_names, member_user_ids, seats_left = row
         seats_left = int(seats_left) if seats_left is not None else 0
 
-        names = [n.strip() for n in (member_names or "").split(",") if n.strip()]
-        if member_name in names:
+        ids = [x.strip() for x in (member_user_ids or "").split(",") if x.strip()]
+        if str(member_user_id) in ids:
             return True, None
 
         if seats_left <= 0:
             return False, "남은 자리가 없어요."
 
+        names = [n.strip() for n in (member_names or "").split(",") if n.strip()]
         names.append(member_name)
+        ids.append(str(member_user_id))
+
         new_member_names = ", ".join(names)
+        new_member_user_ids = ",".join(ids)
+
         c.execute(
-            "UPDATE lunch_groups SET member_names=?, seats_left=? WHERE date=? AND host_user_id=?",
-            (new_member_names, seats_left - 1, today, host_user_id),
+            "UPDATE lunch_groups SET member_names=?, member_user_ids=?, seats_left=? WHERE date=? AND host_user_id=?",
+            (new_member_names, new_member_user_ids, seats_left - 1, today, host_user_id),
         )
         conn.commit()
         return True, None
     finally:
         conn.close()
+
+
+def set_booked_for_group(host_user_id: int):
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT member_user_ids FROM lunch_groups WHERE date=? AND host_user_id=?",
+        (today, host_user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return
+
+    ids = [x.strip() for x in (row[0] or "").split(",") if x.strip()]
+    for uid in ids:
+        try:
+            update_status(int(uid), "Booked")
+        except Exception:
+            continue
+
+
+def get_groups_for_user_today(user_id: int):
+    """Groups where user_id is a member (based on member_user_ids)."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    like1 = f"{user_id},%"
+    like2 = f"%,{user_id},%"
+    like3 = f"%,{user_id}"
+    c.execute(
+        """
+        SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu
+        FROM lunch_groups g
+        JOIN users u ON u.user_id = g.host_user_id
+        WHERE g.date=? AND (
+            g.member_user_ids = ? OR
+            g.member_user_ids LIKE ? OR
+            g.member_user_ids LIKE ? OR
+            g.member_user_ids LIKE ?
+        )
+        ORDER BY g.id DESC
+        """,
+        (today, str(user_id), like1, like2, like3),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
 
 
 def create_auth_session(user_id: int) -> str:
