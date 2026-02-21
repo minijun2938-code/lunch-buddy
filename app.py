@@ -61,10 +61,11 @@ def main():
 
             st.markdown("---")
             st.subheader("📚 점심 기록")
-            dates = db.list_my_group_dates(user_id)
+            sidebar_user_id = u["user_id"]
+            dates = db.list_my_group_dates(sidebar_user_id)
             if dates:
                 sel = st.selectbox("날짜 선택", dates, index=0)
-                groups = db.get_groups_for_user_on_date(user_id, sel)
+                groups = db.get_groups_for_user_on_date(sidebar_user_id, sel)
                 if groups:
                     gid, gdate, host_uid, host_name, member_names, seats_left, menu = groups[0]
                     members = db.list_group_members(host_uid, sel)
