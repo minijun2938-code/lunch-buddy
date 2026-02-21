@@ -954,7 +954,35 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
         conn.commit()
         req_id = c.lastrowid
     except sqlite3.IntegrityError:
-        return None, "이미 오늘 같은 요청을 보냈어요."
+        # A request between the same pair already exists today (unique index).
+        # If the previous one was cancelled/declined, allow re-request by reviving it.
+        c.execute(
+            """
+            SELECT id, status
+            FROM requests
+            WHERE date=? AND from_user_id=? AND to_user_id=?
+            LIMIT 1
+            """,
+            (today, from_user_id, to_user_id),
+        )
+        row = c.fetchone()
+        if not row:
+            return None, "이미 오늘 같은 요청을 보냈어요."
+
+        existing_id, existing_status = row
+        if existing_status in ("cancelled", "declined"):
+            c.execute(
+                """
+                UPDATE requests
+                SET status='pending', group_host_user_id=?, timestamp=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (group_host_user_id, existing_id),
+            )
+            conn.commit()
+            req_id = existing_id
+        else:
+            return None, "이미 오늘 같은 요청을 보냈어요."
     finally:
         conn.close()
 
