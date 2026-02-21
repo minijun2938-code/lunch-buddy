@@ -1261,7 +1261,7 @@ def get_all_statuses():
 
 
 def get_status_today(user_id: int) -> str:
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1289,7 +1289,7 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     if get_status_today(to_user_id) == "Booked" and not (group_host_user_id and int(group_host_user_id) == int(to_user_id)):
         return None, "이미 점심약속이 있는것 같아요!"
 
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     try:
@@ -1355,7 +1355,7 @@ def cancel_pending_requests_for_user(user_id: int):
 
 
 def has_pending_outgoing_today(user_id: int) -> bool:
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1391,7 +1391,7 @@ def get_pending_request_between(from_user_id, to_user_id):
 
 
 def list_incoming_requests(user_id):
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -1410,7 +1410,7 @@ def list_incoming_requests(user_id):
 
 
 def list_outgoing_requests(user_id):
-    today = datetime.date.today().isoformat()
+    today = kst_today_iso()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
