@@ -452,6 +452,19 @@ def main():
                     st.markdown(f"### {uname}")
                     st.write("상태: 점약 있어요 🎉")
 
+    st.markdown("---")
+    st.markdown("### 🙅 미참여")
+    skip_people = [o for o in others if o[2] == "Skip"]
+    if not skip_people:
+        st.caption("오늘 미참여로 설정한 사람이 없어요.")
+    else:
+        cols = st.columns(4)
+        for i, (uid, uname, _status, _chat) in enumerate(skip_people):
+            with cols[i % 4]:
+                with st.container(border=True):
+                    st.markdown(f"### {uname}")
+                    st.write("상태: 오늘은 넘어갈게요 (미참여)")
+
 
 if __name__ == "__main__":
     main()
