@@ -86,10 +86,48 @@ def main():
         st.markdown(
             """
             <style>
-            [data-testid="stAppViewContainer"]{background:#0e1117;color:#e5e7eb;}
-            [data-testid="stSidebar"]{background:#0b1220;}
-            div[data-testid="stVerticalBlockBorderWrapper"]{border-color:rgba(255,255,255,0.12) !important;}
-            input, textarea{color:#e5e7eb !important;}
+            /* ---- Dinner Dark Mode (CSS override) ---- */
+            :root{color-scheme:dark;}
+
+            /* app + sidebar backgrounds */
+            [data-testid="stAppViewContainer"]{background:#0e1117 !important;}
+            [data-testid="stSidebar"]{background:#0b1220 !important;}
+
+            /* global text */
+            html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"],
+            [data-testid="stMarkdownContainer"], [data-testid="stText"],
+            p, li, span, label, small, div{
+              color:#e5e7eb !important;
+            }
+
+            /* headings */
+            h1,h2,h3,h4,h5,h6{color:#f9fafb !important;}
+
+            /* captions/help */
+            [data-testid="stCaptionContainer"], .stCaption{color:rgba(229,231,235,0.75) !important;}
+
+            /* links */
+            a{color:#93c5fd !important;}
+
+            /* containers/borders */
+            div[data-testid="stVerticalBlockBorderWrapper"]{border-color:rgba(255,255,255,0.14) !important;}
+
+            /* inputs */
+            input, textarea{color:#e5e7eb !important; caret-color:#e5e7eb !important;}
+            [data-baseweb="input"] input{background:rgba(255,255,255,0.06) !important;}
+            [data-baseweb="textarea"] textarea{background:rgba(255,255,255,0.06) !important;}
+            [data-baseweb="select"] div{background:rgba(255,255,255,0.06) !important;}
+
+            /* buttons */
+            button[kind="primary"], button[kind="secondary"], .stButton button{
+              color:#0b1220 !important;
+              background:#e5e7eb !important;
+              border-color:rgba(255,255,255,0.25) !important;
+            }
+            .stButton button:hover{filter:brightness(0.92);}
+
+            /* metric widget text */
+            [data-testid="stMetricValue"], [data-testid="stMetricDelta"]{color:#f9fafb !important;}
             </style>
             """,
             unsafe_allow_html=True,
