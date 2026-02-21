@@ -86,7 +86,11 @@ if "user" not in st.session_state:
 
     # 3) Safari-friendly fallback: localStorage
     if "user" not in st.session_state:
-        emp_ls = streamlit_js_eval("localStorage.getItem('lunch_buddy_employee_id')", key="ls_get_emp")
+        emp_ls = streamlit_js_eval(
+            "ls_get_emp",
+            "localStorage.getItem('lunch_buddy_employee_id')",
+            key="ls_get_emp",
+        )
         if emp_ls:
             u = db.get_user_by_employee_id(str(emp_ls).strip().lower())
             if u:
@@ -120,13 +124,18 @@ def main():
                 if token:
                     db.delete_auth_session(token)
                 # localStorage token may exist too
-                ls_token = streamlit_js_eval("localStorage.getItem('lunch_buddy_session_token')", key="ls_get_token")
+                ls_token = streamlit_js_eval(
+                    "ls_get_token",
+                    "localStorage.getItem('lunch_buddy_session_token')",
+                    key="ls_get_token",
+                )
                 if ls_token:
                     db.delete_auth_session(str(ls_token))
                 cookies["session_token"] = ""
                 cookies["employee_id"] = ""
                 cookies.save()
                 streamlit_js_eval(
+                    "ls_clear",
                     "localStorage.removeItem('lunch_buddy_employee_id'); localStorage.removeItem('lunch_buddy_session_token');",
                     key="ls_clear",
                 )
@@ -159,6 +168,7 @@ def main():
                         cookies.save()
                         # Also store in localStorage (Safari-friendly)
                         streamlit_js_eval(
+                            "ls_set_login",
                             f"localStorage.setItem('lunch_buddy_employee_id','{emp_id}'); localStorage.setItem('lunch_buddy_session_token','{token}');",
                             key="ls_set_login",
                         )
