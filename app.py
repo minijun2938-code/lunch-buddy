@@ -95,8 +95,8 @@ def main():
             tab_login, tab_signup = st.tabs(["로그인", "회원가입"])
 
             with tab_login:
-                employee_id = st.text_input("사번 (예: sl55555)")
-                pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password")
+                employee_id = st.text_input("사번 (예: sl55555)", key="login_emp")
+                pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password", key="login_pin")
 
                 if st.button("로그인", use_container_width=True):
                     ok, user = db.verify_login(employee_id, pin)
@@ -121,15 +121,15 @@ def main():
 
             with tab_signup:
                 st.caption("사번은 영문 2개 + 숫자 5개 (예: sl55555), 비밀번호는 숫자 4자리")
-                su_name = st.text_input("이름")
-                su_team = st.text_input("팀명")
-                su_role = st.selectbox("직급", ["팀원", "팀장", "임원"], index=0)
-                su_mbti = st.text_input("MBTI")
-                su_age = st.number_input("나이", min_value=0, max_value=120, value=30, step=1)
-                su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1)
-                su_emp = st.text_input("사번 (예: sl55555)")
-                su_pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password")
-                su_pin2 = st.text_input("비밀번호 확인", type="password")
+                su_name = st.text_input("이름", key="su_name")
+                su_team = st.text_input("팀명", key="su_team")
+                su_role = st.selectbox("직급", ["팀원", "팀장", "임원"], index=0, key="su_role")
+                su_mbti = st.text_input("MBTI", key="su_mbti")
+                su_age = st.number_input("나이", min_value=0, max_value=120, value=30, step=1, key="su_age")
+                su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1, key="su_years")
+                su_emp = st.text_input("사번 (예: sl55555)", key="su_emp")
+                su_pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password", key="su_pin")
+                su_pin2 = st.text_input("비밀번호 확인", type="password", key="su_pin2")
 
                 if st.button("회원가입", use_container_width=True):
                     if su_pin != su_pin2:
