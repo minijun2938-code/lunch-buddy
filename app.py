@@ -318,7 +318,8 @@ def main():
 
     with c1:
         role = st.session_state["user"].get("role")
-        free_disabled = (db.get_status_today(user_id) == "Booked") or (role in ("팀장", "임원"))
+        # Sender lock: if I have a pending outgoing invite, I shouldn't set myself to Free.
+        free_disabled = (db.get_status_today(user_id) in ("Booked", "Planning")) or (role in ("팀장", "임원"))
         if st.button(
             "🟢 점약 없어요 불러주세요",
             use_container_width=True,
@@ -328,6 +329,8 @@ def main():
             st.rerun()
         if role in ("팀장", "임원"):
             st.caption("(팀장/임원은 '불러주세요'를 사용할 수 없어요)")
+        if db.get_status_today(user_id) == "Planning":
+            st.caption("(초대 보낸 상태라서, 초대 철회 전까지는 '불러주세요'로 바꿀 수 없어요)")
 
     with c2:
         if st.button(
@@ -490,6 +493,9 @@ def main():
                 if status == "pending":
                     if st.button("취소", key=f"cancel_{req_id}"):
                         db.cancel_request(req_id)
+                        # if no more pending outgoing, unlock status back to (미정)
+                        if (db.get_status_today(user_id) == "Planning") and (not db.has_pending_outgoing_today(user_id)):
+                            db.clear_status_today(user_id)
                         st.rerun()
 
     st.markdown("---")

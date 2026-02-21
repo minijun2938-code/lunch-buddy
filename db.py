@@ -1345,6 +1345,19 @@ def cancel_pending_requests_for_user(user_id: int):
     conn.close()
 
 
+def has_pending_outgoing_today(user_id: int) -> bool:
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT 1 FROM requests WHERE date=? AND from_user_id=? AND status='pending' LIMIT 1",
+        (today, user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    return bool(row)
+
+
 def cancel_request(request_id):
     update_request_status(request_id, "cancelled")
 
