@@ -1,4 +1,5 @@
 import streamlit as st
+import datetime
 import db
 import bot
 
@@ -6,7 +7,12 @@ import bot
 # (Streamlit Cloud may reset local filesystem; treat this as MVP)
 db.init_db()
 
-st.set_page_config(page_title="Lunch Buddy 🍱", layout="wide")
+# Daily reset is already implicit because all reads/writes are scoped by `date=today`.
+# We keep DB history, but every new day starts clean in the UI.
+
+today_str = datetime.date.today().isoformat()
+
+st.set_page_config(page_title=f"Lunch Buddy 🍱 ({today_str})", layout="wide")
 
 
 def _load_user_from_query():
@@ -30,7 +36,7 @@ if "user" not in st.session_state:
 
 
 def main():
-    st.title("🍱 Lunch Buddy: 오늘 점심 뭐 먹지?")
+    st.title(f"🍱 {today_str} 오늘 점심 같이 드실분?")
     st.markdown("---")
 
     # --- MVP Entrance (Sidebar) ---
