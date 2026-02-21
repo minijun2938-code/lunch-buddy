@@ -417,7 +417,7 @@ def get_user_by_id(user_id):
     c = conn.cursor()
     c.execute(
         """
-        SELECT user_id, username, telegram_chat_id, team, mbti, age, years, employee_id, pin_salt, pin_hash
+        SELECT user_id, username, telegram_chat_id, team, role, mbti, age, years, employee_id, pin_salt, pin_hash
         FROM users
         WHERE user_id=?
         """,
@@ -426,6 +426,21 @@ def get_user_by_id(user_id):
     user = c.fetchone()
     conn.close()
     return user
+
+
+def get_display_name(user_id: int) -> str:
+    """Format: {팀명} {이름} {직급} where 직급 is PM (팀원) or 리더 (팀장/임원)."""
+    u = get_user_by_id(int(user_id))
+    if not u:
+        return str(user_id)
+
+    _uid, username, _chat, team, role, *_rest = u
+    team = (team or "").strip()
+    username = (username or "").strip()
+
+    mapped = "PM" if role == "팀원" else "리더"  # 팀장/임원 포함
+    parts = [p for p in [team, username, mapped] if p]
+    return " ".join(parts) if parts else username
 
 def clear_status_today(user_id: int, *, clear_hosting: bool = True):
     """Remove today's status row so UI shows 'Not Set'.

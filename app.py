@@ -265,7 +265,7 @@ def main():
   {''.join(items)}
 </div>
 <style>
-.lb-chat-item{{padding:6px 8px;border-bottom:1px solid rgba(49,51,63,0.12);}}
+.lb-chat-item{{padding:6px 8px;border-bottom:1px solid rgba(49,51,63,0.12);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;}}
 .lb-chat-meta{{font-size:12px;opacity:0.75;line-height:1.15;margin-bottom:2px;}}
 .lb-chat-msg{{font-size:14px;line-height:1.25;margin:0;}}
 </style>
@@ -278,7 +278,7 @@ def main():
 
                 text = st.chat_input("메시지 입력…")
                 if text:
-                    ok, err = db.add_group_chat(host_uid, user_id, current_user, text, today_str)
+                    ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), text, today_str)
                     if not ok:
                         st.error(err or "전송 실패")
                     st.rerun()
