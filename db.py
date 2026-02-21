@@ -331,16 +331,18 @@ def get_user_by_id(user_id):
     conn.close()
     return user
 
-def update_status(user_id, status):
+def update_status(user_id, status, *, force: bool = False):
     """Set today's status.
 
     Rule: Booked is terminal for the day (cannot be downgraded),
     but we still allow creating a hosting group while Booked.
+
+    Use force=True for admin/cleanup flows (e.g., cancellation).
     """
     today = datetime.date.today().isoformat()
 
     current = get_status_today(user_id)
-    if current == "Booked" and status not in ("Booked",):
+    if (not force) and current == "Booked" and status not in ("Booked",):
         # Do not downgrade Booked.
         return
 
@@ -686,6 +688,31 @@ def get_accepted_partners_today(user_id: int):
     return rows
 
 
+def get_latest_accepted_1to1_detail_today(user_id: int):
+    """Return (req_id, other_user_id, other_name, timestamp) for latest accepted 1:1 request."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT r.id,
+               CASE WHEN r.from_user_id=? THEN r.to_user_id ELSE r.from_user_id END AS other_id,
+               u.username,
+               r.timestamp
+        FROM requests r
+        JOIN users u ON u.user_id = (CASE WHEN r.from_user_id=? THEN r.to_user_id ELSE r.from_user_id END)
+        WHERE r.date=? AND r.status='accepted' AND r.group_host_user_id IS NULL
+          AND (r.from_user_id=? OR r.to_user_id=?)
+        ORDER BY r.timestamp DESC
+        LIMIT 1
+        """,
+        (user_id, user_id, today, user_id, user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    return row
+
+
 def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     """Cancel a booked lunch.
 
@@ -703,9 +730,9 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
 
         if len(member_ids) <= 2:
             # cancel entire booking
-            for uid in member_ids:
-                update_status(uid, "Free")
             cancel_accepted_for_users(member_ids)
+            for uid in member_ids:
+                update_status(uid, "Free", force=True)
 
             conn = get_connection()
             c = conn.cursor()
@@ -720,8 +747,8 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
         if not ok:
             return False, err
 
-        update_status(user_id, "Free")
         cancel_accepted_for_users([user_id])
+        update_status(user_id, "Free", force=True)
         return True, None
 
     # No group: handle 1:1 accepted request
@@ -742,7 +769,7 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     if not row:
         conn.close()
         # fallback: just free me
-        update_status(user_id, "Free")
+        update_status(user_id, "Free", force=True)
         return True, None
 
     req_id, from_uid, to_uid = row
@@ -752,8 +779,8 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     conn.commit()
     conn.close()
 
-    update_status(user_id, "Free")
-    update_status(other, "Free")
+    update_status(user_id, "Free", force=True)
+    update_status(other, "Free", force=True)
     cancel_pending_requests_for_user(user_id)
     cancel_pending_requests_for_user(other)
     return True, None

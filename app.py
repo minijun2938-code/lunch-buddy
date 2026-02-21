@@ -181,9 +181,18 @@ def main():
         st.markdown("**오늘 같이 먹는 멤버**")
         members = db.list_group_members(host_uid, today_str)
         st.write(", ".join([name for _uid, name in members]) if members else (member_names or "-"))
-        if menu:
-            st.markdown(f"**메뉴:** {menu}")
+        st.markdown(f"**메뉴:** {menu or '-'}")
         st.caption(f"호스트: {host_name}")
+    else:
+        # 1:1 booked detail (no group)
+        if my_status == "Booked":
+            d = db.get_latest_accepted_1to1_detail_today(user_id)
+            if d:
+                _req_id, other_id, other_name, ts = d
+                st.markdown("**오늘 점약(1:1) 상세**")
+                st.write(f"함께: {current_user} + {other_name}")
+                st.write("메뉴: -")
+                st.caption(f"시간: {ts}")
 
     # --- Status buttons ---
     st.subheader("👋 오늘 상태는?")
