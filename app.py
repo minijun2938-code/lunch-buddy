@@ -3,6 +3,7 @@ import datetime
 import db
 import bot
 from streamlit_cookies_manager import EncryptedCookieManager
+from streamlit_js_eval import streamlit_js_eval
 
 
 def get_cookie_manager():
@@ -26,9 +27,9 @@ db.init_db()
 # Cookies (persist login)
 cookies = get_cookie_manager()
 
-# Auto-login from cookie if session_state empty
+# Auto-login from cookie/localStorage if session_state empty
 if "user" not in st.session_state:
-    # 1) Try stateful session token (may break if DB resets on Streamlit Cloud)
+    # 1) Try cookie session token
     token = cookies.get("session_token")
     if token:
         row = db.get_user_by_session_token(token)
@@ -45,11 +46,29 @@ if "user" not in st.session_state:
                 "telegram_chat_id": telegram_chat_id,
             }
 
-    # 2) Fallback: stateless cookie (employee_id) so refresh keeps login even if session table cleared
+    # 2) Try cookie employee_id
     if "user" not in st.session_state:
         emp = cookies.get("employee_id")
         if emp:
             u = db.get_user_by_employee_id(str(emp).strip().lower())
+            if u:
+                user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
+                st.session_state["user"] = {
+                    "user_id": user_id,
+                    "username": username,
+                    "employee_id": emp_id,
+                    "team": team,
+                    "mbti": mbti,
+                    "age": age,
+                    "years": years,
+                    "telegram_chat_id": telegram_chat_id,
+                }
+
+    # 3) Safari-friendly fallback: localStorage
+    if "user" not in st.session_state:
+        emp_ls = streamlit_js_eval("localStorage.getItem('lunch_buddy_employee_id')", key="ls_get_emp")
+        if emp_ls:
+            u = db.get_user_by_employee_id(str(emp_ls).strip().lower())
             if u:
                 user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
                 st.session_state["user"] = {
@@ -80,9 +99,17 @@ def main():
                 token = cookies.get("session_token")
                 if token:
                     db.delete_auth_session(token)
+                # localStorage token may exist too
+                ls_token = streamlit_js_eval("localStorage.getItem('lunch_buddy_session_token')", key="ls_get_token")
+                if ls_token:
+                    db.delete_auth_session(str(ls_token))
                 cookies["session_token"] = ""
                 cookies["employee_id"] = ""
                 cookies.save()
+                streamlit_js_eval(
+                    "localStorage.removeItem('lunch_buddy_employee_id'); localStorage.removeItem('lunch_buddy_session_token');",
+                    key="ls_clear",
+                )
                 del st.session_state["user"]
                 st.rerun()
         else:
@@ -110,6 +137,11 @@ def main():
                         cookies["session_token"] = token
                         cookies["employee_id"] = emp_id
                         cookies.save()
+                        # Also store in localStorage (Safari-friendly)
+                        streamlit_js_eval(
+                            f"localStorage.setItem('lunch_buddy_employee_id','{emp_id}'); localStorage.setItem('lunch_buddy_session_token','{token}');",
+                            key="ls_set_login",
+                        )
                         st.rerun()
                     else:
                         st.error("사번 또는 비밀번호가 올바르지 않습니다.")
