@@ -202,6 +202,17 @@ def main():
 
     if show_detail:
         my_groups_today = db.get_groups_for_user_today(user_id)
+
+        # If status is Booked but membership rows are missing (legacy), recover from accepted group request
+        if (not my_groups_today) and my_status == "Booked":
+            host_id = db.get_latest_accepted_group_host_today(user_id)
+            if host_id:
+                try:
+                    db.ensure_member_in_group(int(host_id), int(user_id), today_str)
+                except Exception:
+                    pass
+                my_groups_today = db.get_groups_for_user_today(user_id)
+
         if my_groups_today:
             gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name = my_groups_today[0]
             st.markdown("**오늘 점약 상세**" if my_status == "Booked" else "**오늘 같이 먹는 멤버**")
@@ -235,6 +246,8 @@ def main():
                         st.write(f"함께: {current_user} + {other_name}")
                         st.write("메뉴: -")
                         st.caption(f"시간: {ts}")
+                else:
+                    st.caption("(아직 매칭된 점약 정보를 찾지 못했어요. 새로고침 후 다시 시도해줘)")
 
     # --- Status buttons ---
     st.subheader("👋 오늘 상태는?")

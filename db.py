@@ -710,6 +710,27 @@ def get_accepted_partners_today(user_id: int):
     return rows
 
 
+def get_latest_accepted_group_host_today(user_id: int) -> int | None:
+    """If user accepted/joined a group today, return group_host_user_id."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT group_host_user_id
+        FROM requests
+        WHERE date=? AND status='accepted' AND group_host_user_id IS NOT NULL
+          AND (from_user_id=? OR to_user_id=?)
+        ORDER BY timestamp DESC
+        LIMIT 1
+        """,
+        (today, user_id, user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else None
+
+
 def ensure_1to1_group_today(user_a: int, user_b: int):
     """Ensure a lunch_groups record exists for a matched 1:1 so we can store/show menu/payer.
 
