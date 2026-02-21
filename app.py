@@ -94,13 +94,14 @@ def main():
                     if not ok:
                         st.error("사번 또는 비밀번호가 올바르지 않습니다.")
                     else:
-                        user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = user
+                        user_id, username, telegram_chat_id, team, role, mbti, age, years, emp_id, *_ = user
                         st.session_state["user"] = {
                             "user_id": user_id,
                             "username": username,
                             "employee_id": emp_id,
                             "telegram_chat_id": telegram_chat_id,
                             "team": team,
+                            "role": role,
                             "mbti": mbti,
                             "age": age,
                             "years": years,
@@ -113,6 +114,7 @@ def main():
                 st.caption("사번은 영문 2개 + 숫자 5개 (예: sl55555), 비밀번호는 숫자 4자리")
                 su_name = st.text_input("이름")
                 su_team = st.text_input("팀명")
+                su_role = st.selectbox("직급", ["팀원", "팀장", "임원"], index=0)
                 su_mbti = st.text_input("MBTI")
                 su_age = st.number_input("나이", min_value=0, max_value=120, value=30, step=1)
                 su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1)
@@ -127,6 +129,7 @@ def main():
                         ok, err = db.register_user(
                             username=su_name.strip(),
                             team=su_team.strip(),
+                            role=su_role,
                             mbti=su_mbti.strip().upper(),
                             age=int(su_age),
                             years=int(su_years),
@@ -189,13 +192,17 @@ def main():
         st.caption("⚠️ 이미 점심약속이 있는것 같아요! (오늘은 변경/요청이 제한돼요)")
 
     with c1:
+        role = st.session_state["user"].get("role")
+        free_disabled = (db.get_status_today(user_id) == "Booked") or (role in ("팀원", "팀장"))
         if st.button(
             "🟢 점약 없어요 불러주세요",
             use_container_width=True,
-            disabled=(db.get_status_today(user_id) == "Booked"),
+            disabled=free_disabled,
         ):
             db.update_status(user_id, "Free")
             st.rerun()
+        if role in ("팀원", "팀장"):
+            st.caption("(팀원/팀장은 '불러주세요'를 사용할 수 없어요)")
 
     with c2:
         if st.button(

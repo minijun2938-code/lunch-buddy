@@ -27,6 +27,7 @@ def init_db():
                   username TEXT,
                   telegram_chat_id TEXT,
                   team TEXT,
+                  role TEXT,
                   mbti TEXT,
                   age INTEGER,
                   years INTEGER,
@@ -40,6 +41,7 @@ def init_db():
     existing_cols = {row[1] for row in c.fetchall()}
     wanted = {
         "team": "TEXT",
+        "role": "TEXT",
         "mbti": "TEXT",
         "age": "INTEGER",
         "years": "INTEGER",
@@ -201,6 +203,7 @@ def register_user(
     *,
     username: str,
     team: str,
+    role: str,
     mbti: str,
     age: int,
     years: int,
@@ -231,10 +234,10 @@ def register_user(
     try:
         c.execute(
             """
-            INSERT INTO users (username, team, mbti, age, years, employee_id, pin_salt, pin_hash, telegram_chat_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (username, team, role, mbti, age, years, employee_id, pin_salt, pin_hash, telegram_chat_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (username, team, mbti, int(age), int(years), employee_id, salt, pin_hash, chat_id),
+            (username, team, role, mbti, int(age), int(years), employee_id, salt, pin_hash, chat_id),
         )
         conn.commit()
         return True, None
@@ -251,7 +254,7 @@ def verify_login(employee_id: str, pin: str) -> tuple[bool, tuple | None]:
     if not user:
         return False, None
 
-    user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, salt, pin_hash = user
+    user_id, username, telegram_chat_id, team, role, mbti, age, years, emp_id, salt, pin_hash = user
     if not (pin.isdigit() and len(pin) == 4):
         return False, None
 
@@ -302,7 +305,7 @@ def get_user_by_employee_id(employee_id: str):
     c = conn.cursor()
     c.execute(
         """
-        SELECT user_id, username, telegram_chat_id, team, mbti, age, years, employee_id, pin_salt, pin_hash
+        SELECT user_id, username, telegram_chat_id, team, role, mbti, age, years, employee_id, pin_salt, pin_hash
         FROM users
         WHERE employee_id=?
         """,
