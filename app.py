@@ -277,7 +277,7 @@ def main():
 
             payer_name = None
             if i_pay:
-                payer_name = st.selectbox("누가 쏘나요?", member_list, index=0)
+                payer_name = st.text_input("누가 쏘나요? (이름 입력)", value=current_user)
 
             submitted = st.form_submit_button("저장")
 
