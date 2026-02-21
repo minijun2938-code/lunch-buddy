@@ -47,12 +47,17 @@ db.init_db()
 # Cookies (persist login)
 cookies = get_cookie_manager()
 
-# Auto-login from cookie/localStorage if session_state empty
+# Auto-login (Safari note): storage inside component iframes can be blocked.
+# So we use a cascade: URL token -> cookie token -> cookie employee_id.
 if "user" not in st.session_state:
-    # 1) Try cookie session token
-    token = cookies.get("session_token")
-    if token:
-        row = db.get_user_by_session_token(token)
+    # 0) URL token (survives refresh reliably across browsers)
+    try:
+        url_token = st.query_params.get("t")
+    except Exception:
+        url_token = None
+
+    if url_token:
+        row = db.get_user_by_session_token(str(url_token))
         if row:
             user_id, username, telegram_chat_id, team, mbti, age, years, emp_id = row
             st.session_state["user"] = {
@@ -66,44 +71,41 @@ if "user" not in st.session_state:
                 "telegram_chat_id": telegram_chat_id,
             }
 
-    # 2) Try cookie employee_id
-    if "user" not in st.session_state:
-        emp = cookies.get("employee_id")
-        if emp:
-            u = db.get_user_by_employee_id(str(emp).strip().lower())
-            if u:
-                user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
-                st.session_state["user"] = {
-                    "user_id": user_id,
-                    "username": username,
-                    "employee_id": emp_id,
-                    "team": team,
-                    "mbti": mbti,
-                    "age": age,
-                    "years": years,
-                    "telegram_chat_id": telegram_chat_id,
-                }
+if "user" not in st.session_state:
+    # 1) Cookie session token
+    token = cookies.get("session_token")
+    if token:
+        row = db.get_user_by_session_token(str(token))
+        if row:
+            user_id, username, telegram_chat_id, team, mbti, age, years, emp_id = row
+            st.session_state["user"] = {
+                "user_id": user_id,
+                "username": username,
+                "employee_id": emp_id,
+                "team": team,
+                "mbti": mbti,
+                "age": age,
+                "years": years,
+                "telegram_chat_id": telegram_chat_id,
+            }
 
-    # 3) Safari-friendly fallback: localStorage
-    if "user" not in st.session_state:
-        emp_ls = streamlit_js_eval(
-            js_expressions="localStorage.getItem('lunch_buddy_employee_id')",
-            key="ls_get_emp",
-        )
-        if emp_ls:
-            u = db.get_user_by_employee_id(str(emp_ls).strip().lower())
-            if u:
-                user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
-                st.session_state["user"] = {
-                    "user_id": user_id,
-                    "username": username,
-                    "employee_id": emp_id,
-                    "team": team,
-                    "mbti": mbti,
-                    "age": age,
-                    "years": years,
-                    "telegram_chat_id": telegram_chat_id,
-                }
+if "user" not in st.session_state:
+    # 2) Cookie employee_id
+    emp = cookies.get("employee_id")
+    if emp:
+        u = db.get_user_by_employee_id(str(emp).strip().lower())
+        if u:
+            user_id, username, telegram_chat_id, team, mbti, age, years, emp_id, *_ = u
+            st.session_state["user"] = {
+                "user_id": user_id,
+                "username": username,
+                "employee_id": emp_id,
+                "team": team,
+                "mbti": mbti,
+                "age": age,
+                "years": years,
+                "telegram_chat_id": telegram_chat_id,
+            }
 
 st.set_page_config(page_title="Lunch Buddy 🍱", layout="wide")
 
@@ -122,20 +124,15 @@ def main():
                 token = cookies.get("session_token")
                 if token:
                     db.delete_auth_session(token)
-                # localStorage token may exist too
-                ls_token = streamlit_js_eval(
-                    js_expressions="localStorage.getItem('lunch_buddy_session_token')",
-                    key="ls_get_token",
-                )
-                if ls_token:
-                    db.delete_auth_session(str(ls_token))
                 cookies["session_token"] = ""
                 cookies["employee_id"] = ""
                 cookies.save()
-                streamlit_js_eval(
-                    js_expressions="localStorage.removeItem('lunch_buddy_employee_id'); localStorage.removeItem('lunch_buddy_session_token');",
-                    key="ls_clear",
-                )
+
+                try:
+                    st.query_params.clear()
+                except Exception:
+                    pass
+
                 del st.session_state["user"]
                 st.rerun()
         else:
@@ -160,14 +157,17 @@ def main():
                             "telegram_chat_id": telegram_chat_id,
                         }
                         token = db.create_auth_session(user_id)
+
+                        # Persist: URL param (works well in Safari) + cookie best-effort
+                        try:
+                            st.query_params["t"] = token
+                        except Exception:
+                            pass
+
                         cookies["session_token"] = token
                         cookies["employee_id"] = emp_id
                         cookies.save()
-                        # Also store in localStorage (Safari-friendly)
-                        streamlit_js_eval(
-                            js_expressions=f"localStorage.setItem('lunch_buddy_employee_id','{emp_id}'); localStorage.setItem('lunch_buddy_session_token','{token}');",
-                            key="ls_set_login",
-                        )
+
                         st.rerun()
                     else:
                         st.error("사번 또는 비밀번호가 올바르지 않습니다.")
