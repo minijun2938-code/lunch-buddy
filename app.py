@@ -249,33 +249,37 @@ def main():
         if status == "pending":
             return "대기중…"
         if status == "accepted":
-            return "우리 같이 먹어요 ❤️"
+            return "🍚👏 우리 같이 먹어요"
         if status == "declined":
             return "오늘은 다음에 🙏"
         if status == "cancelled":
             return "취소됨"
         return status
 
-    st.subheader("🎉 성사된 오늘의 점심")
+    # Load requests once
     incoming = db.list_incoming_requests(user_id)
     outgoing = db.list_outgoing_requests(user_id)
+
+    # Confirmed list (only for the current user)
     confirmed = [
         ("incoming", *row) for row in incoming if row[3] == "accepted"
     ] + [
         ("outgoing", *row) for row in outgoing if row[3] == "accepted"
     ]
 
-    if not confirmed:
-        st.caption("아직 성사된 약속이 없어요.")
-    else:
-        for direction, req_id, other_uid, other_name, status, ts in confirmed:
-            with st.container(border=True):
-                if direction == "incoming":
+    st.subheader("📊 오늘 점심 성사")
+    st.metric("성사 건수", len(confirmed))
+
+    # Show details only to the parties (which is the current user anyway)
+    with st.expander("성사된 오늘의 점심 보기", expanded=False):
+        if not confirmed:
+            st.caption("아직 성사된 약속이 없어요.")
+        else:
+            for direction, req_id, other_uid, other_name, status, ts in confirmed:
+                with st.container(border=True):
                     st.write(f"**{other_name}**님과 점심 확정!")
-                else:
-                    st.write(f"**{other_name}**님과 점심 확정!")
-                st.markdown(f"**{pretty_status(status)}**")
-                st.caption(f"{ts}")
+                    st.markdown(f"**{pretty_status(status)}**")
+                    st.caption(f"{ts}")
 
     st.markdown("---")
 
@@ -303,7 +307,9 @@ def main():
                             if sender and sender[2]:
                                 bot.send_telegram_msg(sender[2], f"✅ [Lunch Buddy] {current_user}님이 점심 초대를 수락했어요.")
 
-                            st.success("우리 같이 먹어요 ❤️")
+                            # If accepted, set my status to 'Booked'
+                            db.update_status(user_id, "Booked")
+                            st.success("🍚👏 우리 같이 먹어요")
                             st.rerun()
                     with c2:
                         if st.button("❌ 거절", key=f"dec_{req_id}", use_container_width=True):
@@ -349,6 +355,8 @@ def main():
             st.info("현재 내 상태: **우리쪽 합류 모집 중** 🧑‍🍳")
         elif my_status == "Planning":
             st.info("현재 내 상태: **점약 잡는 중** 🟠")
+        elif my_status == "Booked":
+            st.info("현재 내 상태: **점약 있어요 🎉**")
         elif my_status == "Not Set":
             st.warning("현재 내 상태: **아직 미설정**")
         else:
