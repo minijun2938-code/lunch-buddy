@@ -51,25 +51,19 @@ def main():
 
     # --- Status Setting ---
     st.subheader(f"👋 {current_user}님의 오늘 상태는?")
-    
-    col1, col2, col3 = st.columns(3)
-    
+
+    col1, col2 = st.columns(2)
+
     with col1:
-        if st.button("🔴 점약 있음 (Busy)", use_container_width=True):
-            db.update_status(user_id, "Busy")
-            st.toast("상태 변경 완료: 점약 있음 🔴")
-            st.rerun()
-            
-    with col2:
-        if st.button("🟢 점약 없음 (Free)", use_container_width=True):
+        if st.button("🟢 점약 없어요 불러주세요", use_container_width=True):
             db.update_status(user_id, "Free")
-            st.toast("상태 변경 완료: 점약 없음 🟢 (밥 친구 환영!)")
+            st.toast("상태 변경 완료: 점약 없음 🟢")
             st.rerun()
-            
-    with col3:
-        if st.button("⚪ 미참여 (Skip)", use_container_width=True):
-            db.update_status(user_id, "Skip")
-            st.toast("상태 변경 완료: 미참여 ⚪")
+
+    with col2:
+        if st.button("🟠 점약을 잡는 중이에요", use_container_width=True):
+            db.update_status(user_id, "Planning")
+            st.toast("상태 변경 완료: 점약 잡는 중 🟠")
             st.rerun()
 
     st.markdown("---")
@@ -133,22 +127,21 @@ def main():
 
     # Display My Status
     if myself:
-        my_status_text = myself[0][2]
-        color = "grey"
-        if my_status_text == "Busy":
-            color = "red"
-        elif my_status_text == "Free":
-            color = "green"
-        st.info(
-            f"현재 내 상태: **{my_status_text}** ({'🔴' if color=='red' else '🟢' if color=='green' else '⚪'})"
-        )
+        my_status = myself[0][2]
+        if my_status == "Free":
+            st.info("현재 내 상태: **점약 없음(불러주세요)** 🟢")
+        elif my_status == "Planning":
+            st.info("현재 내 상태: **점약 잡는 중** 🟠")
+        elif my_status == "Not Set":
+            st.warning("현재 내 상태: **아직 미설정**")
+        else:
+            st.info(f"현재 내 상태: **{my_status}**")
 
     if not others:
         st.write("아직 등록된 다른 동료가 없어요.")
     else:
-        show_only_free = st.toggle("🟢 Free인 사람만 보기", value=True)
-        if show_only_free:
-            others = [o for o in others if o[2] == "Free"]
+        # Always show only people who said "call me" (Free)
+        others = [o for o in others if o[2] == "Free"]
 
         cols = st.columns(4)
         for i, (uid, uname, status, t_chat_id) in enumerate(others):
@@ -156,13 +149,11 @@ def main():
                 with st.container(border=True):
                     st.markdown(f"### {uname}")
 
-                    status_display = "⚪ 미설정/미참여"
-                    if status == "Busy":
-                        status_display = "🔴 점약 있음"
-                    elif status == "Free":
-                        status_display = "🟢 점약 없음 (Free!)"
-                    elif status == "Skip":
-                        status_display = "⚪ 미참여"
+                    status_display = "⚪ 미설정"
+                    if status == "Free":
+                        status_display = "🟢 점약 없음 (불러주세요)"
+                    elif status == "Planning":
+                        status_display = "🟠 점약 잡는 중"
 
                     st.write(f"상태: {status_display}")
 
