@@ -162,6 +162,7 @@ def main():
             ok, err = db.cancel_booking_for_user(user_id)
             if ok:
                 st.success("취소 완료")
+                st.session_state.pop("hosting_open", None)
                 st.rerun()
             else:
                 st.error(err or "취소 실패")
@@ -171,7 +172,7 @@ def main():
             "Hosting": "오늘 점심 같이 드실분? 모집중 🧑‍🍳",
             "Planning": "점약 잡는 중 🟠",
             "Skip": "오늘은 넘어갈게요 (미참여) 🙅",
-            "Not Set": "아직 미설정",
+            "Not Set": "(미정)",
         }.get(my_status, my_status)
         st.info(f"현재 내 상태: **{status_text}**")
 

@@ -334,14 +334,23 @@ def get_user_by_id(user_id):
     conn.close()
     return user
 
-def clear_status_today(user_id: int):
-    """Remove today's status row so UI shows 'Not Set'."""
+def clear_status_today(user_id: int, *, clear_hosting: bool = True):
+    """Remove today's status row so UI shows 'Not Set'.
+
+    If clear_hosting=True, also remove the user's hosting listing for today.
+    """
     today = datetime.date.today().isoformat()
     conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM daily_status WHERE date=? AND user_id=?", (today, user_id))
     conn.commit()
     conn.close()
+
+    if clear_hosting:
+        try:
+            delete_group(user_id)
+        except Exception:
+            pass
 
 
 def update_status(user_id, status, *, force: bool = False):
@@ -743,8 +752,18 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
 
         if len(member_ids) <= 2:
             # cancel entire booking
-            cancel_accepted_for_users(member_ids)
-            for uid in member_ids:
+            related_ids = set(member_ids)
+
+            # safety: if members table is incomplete, also include latest accepted 1:1 partner
+            d = get_latest_accepted_1to1_detail_today(user_id)
+            if d:
+                _req_id, other_id, _other_name, _ts = d
+                related_ids.add(int(other_id))
+                related_ids.add(int(user_id))
+
+            related_ids_list = sorted(list(related_ids))
+            cancel_accepted_for_users(related_ids_list)
+            for uid in related_ids_list:
                 clear_status_today(uid)
 
             conn = get_connection()
