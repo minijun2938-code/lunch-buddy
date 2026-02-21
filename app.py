@@ -181,10 +181,17 @@ def main():
                     with c1:
                         if st.button("✅ 수락", key=f"acc_{req_id}", use_container_width=True):
                             db.update_request_status(req_id, "accepted")
+
+                            # If I'm hosting today, accepting means the requester joins my group
+                            ok_add, _err_add = db.add_member_to_group(user_id, from_name)
+                            if ok_add:
+                                st.toast("현재 멤버에 추가했어요! (남은 자리 -1)")
+
                             # Optional: notify sender
                             sender = db.get_user_by_id(from_uid)
                             if sender and sender[2]:
                                 bot.send_telegram_msg(sender[2], f"✅ [Lunch Buddy] {current_user}님이 점심 초대를 수락했어요.")
+
                             st.success("수락 완료")
                             st.rerun()
                     with c2:
@@ -261,20 +268,16 @@ def main():
                         disabled=disabled,
                         use_container_width=True,
                     ):
-                        ok_add, err_add = db.add_member_to_group(host_uid, current_user)
-                        if not ok_add:
-                            st.warning(err_add or "멤버 추가 실패")
+                        req_id = db.create_request(user_id, host_uid)
+                        if not req_id:
+                            st.warning("이미 오늘 같은 요청을 보냈어요.")
                         else:
-                            req_id = db.create_request(user_id, host_uid)
-                            if not req_id:
-                                st.warning("이미 오늘 같은 요청을 보냈어요.")
-                            else:
-                                # Optional telegram notify host
-                                host = db.get_user_by_id(host_uid)
-                                host_chat = host[2] if host else None
-                                bot.send_telegram_msg(host_chat, f"🙋 [Lunch Buddy] {current_user}님이 '{host_name}' 팀에 합류 요청했어요! (앱에서 확인)")
-                                st.success("요청 보냈어요! (현재 멤버에 추가됨)")
-                            st.rerun()
+                            # Optional telegram notify host
+                            host = db.get_user_by_id(host_uid)
+                            host_chat = host[2] if host else None
+                            bot.send_telegram_msg(host_chat, f"🙋 [Lunch Buddy] {current_user}님이 '{host_name}' 팀에 합류 요청했어요! (앱에서 확인)")
+                            st.success("요청 보냈어요! (수락되면 멤버에 추가돼요)")
+                        st.rerun()
 
                     if disabled:
                         st.caption("이미 요청을 보냈어요(대기중).")
