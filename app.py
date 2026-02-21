@@ -262,6 +262,9 @@ def main():
 
             # dropdown from member_names (best-effort)
             raw_names = [n.strip() for n in (member_names or "").split(",") if n.strip()]
+            # Always include me as a selectable payer (even when hosting solo)
+            raw_names = [current_user] + raw_names
+
             # de-dup while preserving order
             seen = set()
             member_list = []
