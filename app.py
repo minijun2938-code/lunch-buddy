@@ -77,7 +77,8 @@ def main():
 
         if "user" in st.session_state:
             u = st.session_state["user"]
-            st.success(f"로그인됨: {u['username']} ({u['employee_id']})")
+            name = db.format_name(u.get('username',''), u.get('english_name',''))
+            st.success(f"로그인됨: {name} ({u['employee_id']})")
 
             st.markdown("---")
             st.subheader("📚 점심 기록")
@@ -116,10 +117,11 @@ def main():
                     if not ok:
                         st.error("사번 또는 비밀번호가 올바르지 않습니다.")
                     else:
-                        user_id, username, telegram_chat_id, team, role, mbti, age, years, emp_id, *_ = user
+                        user_id, username, english_name, telegram_chat_id, team, role, mbti, age, years, emp_id, *_ = user
                         st.session_state["user"] = {
                             "user_id": user_id,
                             "username": username,
+                            "english_name": english_name,
                             "employee_id": emp_id,
                             "telegram_chat_id": telegram_chat_id,
                             "team": team,
@@ -135,6 +137,7 @@ def main():
             with tab_signup:
                 st.caption("사번은 영문 2개 + 숫자 5개 (예: sl55555), 비밀번호는 숫자 4자리")
                 su_name = st.text_input("이름", key="su_name")
+                su_english = st.text_input("영어이름", key="su_english")
                 su_team = st.text_input("팀명", key="su_team")
                 su_role = st.selectbox("직급", ["팀원", "팀장", "임원"], index=0, key="su_role")
                 # MBTI/나이는 입력받지 않음 (단순화)
@@ -149,6 +152,7 @@ def main():
                     else:
                         ok, err = db.register_user(
                             username=su_name.strip(),
+                            english_name=su_english.strip(),
                             team=su_team.strip(),
                             role=su_role,
                             mbti="",

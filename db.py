@@ -40,6 +40,7 @@ def init_db():
         '''CREATE TABLE IF NOT EXISTS users
                  (user_id INTEGER PRIMARY KEY AUTOINCREMENT,
                   username TEXT,
+                  english_name TEXT,
                   telegram_chat_id TEXT,
                   team TEXT,
                   role TEXT,
@@ -55,6 +56,7 @@ def init_db():
     c.execute("PRAGMA table_info(users)")
     existing_cols = {row[1] for row in c.fetchall()}
     wanted = {
+        "english_name": "TEXT",
         "team": "TEXT",
         "role": "TEXT",
         "mbti": "TEXT",
@@ -294,6 +296,7 @@ def reset_today_data():
 def register_user(
     *,
     username: str,
+    english_name: str,
     team: str,
     role: str,
     mbti: str,
@@ -326,10 +329,10 @@ def register_user(
     try:
         c.execute(
             """
-            INSERT INTO users (username, team, role, mbti, age, years, employee_id, pin_salt, pin_hash, telegram_chat_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (username, english_name, team, role, mbti, age, years, employee_id, pin_salt, pin_hash, telegram_chat_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (username, team, role, mbti, int(age), int(years), employee_id, salt, pin_hash, chat_id),
+            (username, (english_name or "").strip(), team, role, mbti, int(age), int(years), employee_id, salt, pin_hash, chat_id),
         )
         conn.commit()
         return True, None
@@ -346,7 +349,7 @@ def verify_login(employee_id: str, pin: str) -> tuple[bool, tuple | None]:
     if not user:
         return False, None
 
-    user_id, username, telegram_chat_id, team, role, mbti, age, years, emp_id, salt, pin_hash = user
+    user_id, username, english_name, telegram_chat_id, team, role, mbti, age, years, emp_id, salt, pin_hash = user
     if not (pin.isdigit() and len(pin) == 4):
         return False, None
 
@@ -401,7 +404,7 @@ def get_user_by_employee_id(employee_id: str):
     c = conn.cursor()
     c.execute(
         """
-        SELECT user_id, username, telegram_chat_id, team, role, mbti, age, years, employee_id, pin_salt, pin_hash
+        SELECT user_id, username, english_name, telegram_chat_id, team, role, mbti, age, years, employee_id, pin_salt, pin_hash
         FROM users
         WHERE employee_id=?
         """,
@@ -417,7 +420,7 @@ def get_user_by_id(user_id):
     c = conn.cursor()
     c.execute(
         """
-        SELECT user_id, username, telegram_chat_id, team, role, mbti, age, years, employee_id, pin_salt, pin_hash
+        SELECT user_id, username, english_name, telegram_chat_id, team, role, mbti, age, years, employee_id, pin_salt, pin_hash
         FROM users
         WHERE user_id=?
         """,
@@ -428,19 +431,25 @@ def get_user_by_id(user_id):
     return user
 
 
+def format_name(username: str, english_name: str | None) -> str:
+    username = (username or "").strip()
+    en = (english_name or "").strip()
+    return f"{username} ({en})" if en else username
+
+
 def get_display_name(user_id: int) -> str:
-    """Format: {팀명} {이름} {직급} where 직급 is PM (팀원) or 리더 (팀장/임원)."""
+    """Format: {팀명} {이름 (영어이름)} {직급} where 직급 is PM (팀원) or 리더 (팀장/임원)."""
     u = get_user_by_id(int(user_id))
     if not u:
         return str(user_id)
 
-    _uid, username, _chat, team, role, *_rest = u
+    _uid, username, english_name, _chat, team, role, *_rest = u
     team = (team or "").strip()
-    username = (username or "").strip()
+    name = format_name(username, english_name)
 
     mapped = "PM" if role == "팀원" else "리더"  # 팀장/임원 포함
-    parts = [p for p in [team, username, mapped] if p]
-    return " ".join(parts) if parts else username
+    parts = [p for p in [team, name, mapped] if p]
+    return " ".join(parts) if parts else name
 
 def clear_status_today(user_id: int, *, clear_hosting: bool = True):
     """Remove today's status row so UI shows 'Not Set'.
