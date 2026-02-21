@@ -186,6 +186,22 @@ def init_db():
                   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
     )
 
+    # Group chat (members-only)
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS group_chat
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  date TEXT,
+                  host_user_id INTEGER,
+                  user_id INTEGER,
+                  username TEXT,
+                  message TEXT,
+                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'''
+    )
+    c.execute(
+        """CREATE INDEX IF NOT EXISTS idx_group_chat_day_host
+           ON group_chat(date, host_user_id, timestamp)"""
+    )
+
     # Migration: add group_host_user_id if missing
     c.execute("PRAGMA table_info(requests)")
     rcols = {row[1] for row in c.fetchall()}
@@ -676,6 +692,18 @@ def get_groups_for_user_on_date(user_id: int, date_str: str):
     return rows
 
 
+def is_member_of_group(host_user_id: int, user_id: int, date_str: str) -> bool:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT 1 FROM group_members WHERE date=? AND host_user_id=? AND user_id=? LIMIT 1",
+        (date_str, host_user_id, user_id),
+    )
+    row = c.fetchone()
+    conn.close()
+    return bool(row)
+
+
 def list_group_members(host_user_id: int, date_str: str):
     conn = get_connection()
     c = conn.cursor()
@@ -948,6 +976,43 @@ def cancel_booking_for_user(user_id: int) -> tuple[bool, str | None]:
     clear_status_today(other)
     cancel_pending_requests_for_user(user_id)
     cancel_pending_requests_for_user(other)
+    return True, None
+
+
+def list_group_chat(host_user_id: int, date_str: str, limit: int = 200):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT user_id, username, message, timestamp
+        FROM group_chat
+        WHERE date=? AND host_user_id=?
+        ORDER BY timestamp ASC
+        LIMIT ?
+        """,
+        (date_str, host_user_id, int(limit)),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def add_group_chat(host_user_id: int, user_id: int, username: str, message: str, date_str: str) -> tuple[bool, str | None]:
+    message = (message or "").strip()
+    if not message:
+        return False, "메시지를 입력해주세요."
+
+    if not is_member_of_group(host_user_id, user_id, date_str):
+        return False, "그룹 멤버만 채팅을 사용할 수 있어요."
+
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO group_chat(date, host_user_id, user_id, username, message) VALUES (?,?,?,?,?)",
+        (date_str, host_user_id, user_id, username, message),
+    )
+    conn.commit()
+    conn.close()
     return True, None
 
 

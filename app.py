@@ -238,6 +238,24 @@ def main():
             if payer_name:
                 st.markdown(f"**내가쏜다:** {payer_name} 💳")
             st.caption(f"호스트: {host_name}")
+
+            # --- Members-only chat ---
+            with st.expander("💬 멤버 채팅 (메뉴/시간 정하기)", expanded=True):
+                chat_rows = db.list_group_chat(host_uid, today_str, limit=200)
+                if not chat_rows:
+                    st.caption("아직 대화가 없어요.")
+                else:
+                    for _uid, uname, msg, ts in chat_rows:
+                        with st.chat_message("user"):
+                            st.markdown(f"**{uname}**  · {ts}")
+                            st.write(msg)
+
+                text = st.chat_input("메시지 입력…")
+                if text:
+                    ok, err = db.add_group_chat(host_uid, user_id, current_user, text, today_str)
+                    if not ok:
+                        st.error(err or "전송 실패")
+                    st.rerun()
         else:
             # 1:1 booked detail (no group) → auto-create a 1:1 group so details can be stored/shown
             if my_status == "Booked":
