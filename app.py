@@ -246,22 +246,13 @@ def main():
                 if not chat_rows:
                     st.caption("아직 대화가 없어요.")
                 else:
-                    # show last 5; allow scroll for older
-                    show_rows = chat_rows[-5:]
-                    older = chat_rows[:-5]
-
-                    if older:
-                        with st.container(height=220, border=True):
-                            st.caption(f"이전 메시지 {len(older)}개")
-                            for _uid, uname, msg, ts in older:
-                                st.markdown(f"**{uname}** · {ts}")
-                                st.write(msg)
-                                st.divider()
-
-                    for _uid, uname, msg, ts in show_rows:
-                        with st.chat_message("user"):
-                            st.markdown(f"**{uname}**  · {ts}")
+                    # One stable scroll area (chat_message + nested containers can behave oddly)
+                    with st.container(height=280, border=True):
+                        # show last 50 in the scroll area
+                        for _uid, uname, msg, ts in chat_rows[-50:]:
+                            st.markdown(f"**{uname}** · {ts}")
                             st.write(msg)
+                            st.divider()
 
                 text = st.chat_input("메시지 입력…")
                 if text:
