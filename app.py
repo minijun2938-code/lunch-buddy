@@ -274,7 +274,7 @@ def main():
 
     with c1:
         role = st.session_state["user"].get("role")
-        free_disabled = (db.get_status_today(user_id) == "Booked") or (role in ("팀원", "팀장"))
+        free_disabled = (db.get_status_today(user_id) == "Booked") or (role in ("팀장", "임원"))
         if st.button(
             "🟢 점약 없어요 불러주세요",
             use_container_width=True,
@@ -282,8 +282,8 @@ def main():
         ):
             db.update_status(user_id, "Free")
             st.rerun()
-        if role in ("팀원", "팀장"):
-            st.caption("(팀원/팀장은 '불러주세요'를 사용할 수 없어요)")
+        if role in ("팀장", "임원"):
+            st.caption("(팀장/임원은 '불러주세요'를 사용할 수 없어요)")
 
     with c2:
         if st.button(
