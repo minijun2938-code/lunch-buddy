@@ -485,8 +485,8 @@ def update_status(user_id, status, *, force: bool = False):
     conn.commit()
     conn.close()
 
-    if status == "Booked":
-        cancel_pending_requests_for_user(user_id)
+    # NOTE: We no longer auto-cancel pending requests when Booked.
+    # Multiple people can invite/poke; user can choose/accept.
 
     # If user explicitly sets to Free/Planning/Not Set, remove their hosting listing.
     # But do NOT delete hosting just because they became Booked.
@@ -604,6 +604,53 @@ def ensure_member_in_group(host_user_id: int, user_id: int, date_str: str):
     )
     conn.commit()
     conn.close()
+
+
+def ensure_fixed_group_today(host_user_id: int):
+    """Ensure a non-recruiting group exists (seats_left=0) for the host today."""
+    today = datetime.date.today().isoformat()
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "INSERT OR IGNORE INTO lunch_groups(date, host_user_id, member_names, member_user_ids, seats_left, menu, payer_name) VALUES (?,?,?,?,?,?,?)",
+            (today, host_user_id, "", "", 0, "", ""),
+        )
+        c.execute(
+            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+            (today, host_user_id, host_user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def add_member_fixed_group(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
+    """Add member to host's fixed group (no seats decrement)."""
+    today = datetime.date.today().isoformat()
+    member_name = (member_name or "").strip()
+    if not member_name:
+        return False, "member_name이 비어있습니다."
+
+    ensure_fixed_group_today(host_user_id)
+
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "INSERT OR IGNORE INTO group_members(date, host_user_id, user_id) VALUES (?,?,?)",
+            (today, host_user_id, member_user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    try:
+        _rebuild_group_legacy_fields(host_user_id, today)
+    except Exception:
+        pass
+
+    return True, None
 
 
 def accept_group_join(host_user_id: int, member_user_id: int, member_name: str) -> tuple[bool, str | None]:
@@ -1226,7 +1273,7 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     Returns: (request_id, error_message)
     """
     # one-lunch rule
-    if get_status_today(from_user_id) in ("Booked", "Planning"):
+    if get_status_today(from_user_id) == "Booked":
         return None, "이미 점심약속이 있는것 같아요!"
 
     # Allow inviting a Booked host ONLY when it's a join request to that host's group.
@@ -1259,8 +1306,8 @@ def create_request(from_user_id, to_user_id, group_host_user_id: int | None = No
     finally:
         conn.close()
 
-    set_planning(from_user_id)
-    set_planning(to_user_id)
+    # Do NOT change statuses on pending.
+    # Users should remain visible as Free until an invite is accepted.
     return req_id, None
 
 

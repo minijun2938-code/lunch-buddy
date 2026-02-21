@@ -450,9 +450,22 @@ def main():
                                 else:
                                     st.warning(err_add or "그룹 합류 처리 실패")
                             else:
+                                # 1:1 accept.
+                                # Keep both as Booked, and allow multiple accepts to form a natural group.
                                 db.update_status(user_id, "Booked")
                                 db.update_status(from_uid, "Booked")
-                                # create implicit 1:1 group for details/menu/payer
+
+                                # If I already have a group today, add the other into that group.
+                                my_groups = db.get_groups_for_user_today(user_id)
+                                if my_groups:
+                                    _gid, _d, my_host_uid, _hn, _mn, _sl, _m, _p = my_groups[0]
+                                    db.add_member_fixed_group(int(my_host_uid), int(from_uid), from_name)
+                                else:
+                                    # create a fixed group for me and add the partner
+                                    db.ensure_fixed_group_today(int(user_id))
+                                    db.add_member_fixed_group(int(user_id), int(from_uid), from_name)
+
+                                # (optional) also ensure legacy 1:1 group exists for detail compatibility
                                 db.ensure_1to1_group_today(user_id, from_uid)
 
                             sender = db.get_user_by_id(from_uid)
