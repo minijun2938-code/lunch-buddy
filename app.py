@@ -497,20 +497,6 @@ def main():
                             st.rerun()
 
     st.markdown("---")
-
-    st.markdown("### ✅ 성사완료")
-    booked_people = [o for o in others if o[2] == "Booked"]
-    if not booked_people:
-        st.caption("아직 성사완료된 사람이 없어요.")
-    else:
-        cols = st.columns(4)
-        for i, (uid, uname, _status, _chat) in enumerate(booked_people):
-            with cols[i % 4]:
-                with st.container(border=True):
-                    st.markdown(f"### {uname}")
-                    st.write("상태: 점약 있어요 🎉")
-
-    st.markdown("---")
     st.markdown("### 🙅 미참여")
     skip_people = [o for o in others if o[2] == "Skip"]
     if not skip_people:
