@@ -132,10 +132,7 @@ with tab_matrix:
             range_y=[0, 6],
             color_discrete_map={"Bottleneck": "#ED1C24", "Synergy": "#FFB100"},
         )
-        # 4분면 가이드(3,3)
-        fig.add_hline(y=3, line_dash="dash", line_color="gray")
-        fig.add_vline(x=3, line_dash="dash", line_color="gray")
-        # (0,0) 축 라인 표시
+        # 점선 가이드는 제거하고, (0,0) 축만 표시
         fig.add_hline(y=0, line_color="#111", line_width=2)
         fig.add_vline(x=0, line_color="#111", line_width=2)
 
