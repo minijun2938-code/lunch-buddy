@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import uuid
 from streamlit_cookies_manager import EncryptedCookieManager
+import streamlit.components.v1 as components
 
 # Page Config
 st.set_page_config(page_title="SK Enmove MPRS Synergy Sync 2026", layout="wide", page_icon="🤝")
@@ -27,6 +28,36 @@ if "voted_items" not in st.session_state:
     st.session_state["voted_items"] = set()
 if "voted_ai" not in st.session_state:
     st.session_state["voted_ai"] = set()
+
+# Mobile UX fix: make first tap on buttons work even when keyboard is open (iOS/Android)
+components.html(
+    """
+    <script>
+    (function(){
+      if (window.__oc_focus_fix_installed) return;
+      window.__oc_focus_fix_installed = true;
+      let last = 0;
+      function handler(e){
+        const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+        if(!btn) return;
+        const ae = document.activeElement;
+        if(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')){
+          const now = Date.now();
+          if(now - last < 250) return; // prevent double fire
+          last = now;
+          ae.blur();
+          setTimeout(()=>{ try{ btn.click(); }catch(_){} }, 0);
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+      document.addEventListener('touchstart', handler, {capture:true});
+      document.addEventListener('pointerdown', handler, {capture:true});
+    })();
+    </script>
+    """,
+    height=0,
+)
 
 # Custom CSS
 st.markdown(
