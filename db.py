@@ -564,6 +564,19 @@ def update_user_chat_id(user_id, chat_id):
     conn.close()
 
 
+def update_user_chat_id_by_employee_id(employee_id: str, chat_id: str) -> tuple[bool, str | None]:
+    employee_id = (employee_id or "").strip().lower()
+    if not employee_id:
+        return False, "employee_id가 비어있습니다."
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE users SET telegram_chat_id=? WHERE employee_id=?", (str(chat_id), employee_id))
+    conn.commit()
+    ok = c.rowcount > 0
+    conn.close()
+    return (ok, None if ok else "해당 사번 사용자를 찾지 못했어요.")
+
+
 def set_planning(user_id: int, *, meal: str = "lunch"):
     update_status(user_id, "Planning", meal=_norm_meal(meal))
 

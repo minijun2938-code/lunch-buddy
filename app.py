@@ -177,6 +177,44 @@ def main():
             st.success(f"로그인됨: {name} ({u['employee_id']})")
 
             st.markdown("---")
+
+            # --- Telegram notification onboarding ---
+            st.subheader("🔔 텔레그램 알림")
+            urow = db.get_user_by_id(int(u["user_id"]))
+            _tg_chat_id = None
+            if urow:
+                _tg_chat_id = urow[3]
+
+            if _tg_chat_id:
+                st.success("✅ 알림 연동됨")
+            else:
+                st.warning("❌ 알림 미연동 (초대를 놓칠 수 있어요)")
+
+            bot_username = bot.get_bot_username()
+            emp_id = u.get("employee_id")
+            if bot_username and emp_id:
+                st.link_button(
+                    "텔레그램 연동하기(봇 열기)",
+                    f"https://t.me/{bot_username}?start={emp_id}",
+                    use_container_width=True,
+                )
+                st.caption("버튼 클릭 → 텔레그램에서 '시작(Start)'만 누르면 됩니다")
+
+                if st.button("연동 확인", use_container_width=True):
+                    ok2, err2, chat_id = bot.try_register_chat_id_for_employee(emp_id)
+                    if not ok2:
+                        st.error(err2 or "연동 확인 실패")
+                    else:
+                        ok3, err3 = db.update_user_chat_id_by_employee_id(emp_id, chat_id)
+                        if ok3:
+                            st.success("연동 완료! 이제 초대/수락 알림이 텔레그램으로 와요.")
+                            st.rerun()
+                        else:
+                            st.error(err3 or "DB 저장 실패")
+            else:
+                st.caption("(관리자) TELEGRAM_BOT_USERNAME / TELEGRAM_BOT_TOKEN 설정이 필요합니다")
+
+            st.markdown("---")
             st.subheader("👤 내 프로필")
             with st.expander("프로필 수정 (사번 제외)", expanded=False):
                 urow = db.get_user_by_id(int(u["user_id"]))
