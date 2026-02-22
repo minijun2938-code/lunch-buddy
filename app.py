@@ -296,7 +296,9 @@ def main():
         st.stop()
 
     # global auto refresh (invites + colleagues)
-    st_autorefresh(interval=3000, key="global_refresh")
+    # Pause refresh while a confirmation dialog is open (otherwise it disappears)
+    if not st.session_state.get("pause_refresh", False):
+        st_autorefresh(interval=3000, key="global_refresh")
 
     user_id = st.session_state["user"]["user_id"]
     current_user = st.session_state["user"]["username"]
@@ -320,15 +322,35 @@ def main():
             if my_status == "Booked":
                 st.markdown("## 점약 있어요 🎉")
 
-                # Always show detail + chat (no toggle)
+                # Confirm dialog (prevents accidental cancel)
                 if st.button("🚫 점약 취소하기", type="primary"):
-                    ok, err = db.cancel_booking_for_user(user_id, meal=meal)
-                    if ok:
-                        st.success("취소 완료")
-                        st.session_state.pop("hosting_open", None)
-                        st.rerun()
-                    else:
-                        st.error(err or "취소 실패")
+                    st.session_state["confirm_cancel_open"] = True
+                    st.session_state["pause_refresh"] = True
+
+                if st.session_state.get("confirm_cancel_open", False):
+                    @st.dialog("정말 취소하시겠어요? (눈물)")
+                    def _confirm_cancel_dialog():
+                        st.write("지금 잡힌 약속/그룹이 취소돼요. 괜찮아요?")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            if st.button("네, 취소할게요", type="primary", use_container_width=True):
+                                ok, err = db.cancel_booking_for_user(user_id, meal=meal)
+                                # close dialog
+                                st.session_state["confirm_cancel_open"] = False
+                                st.session_state["pause_refresh"] = False
+                                if ok:
+                                    st.success("취소 완료")
+                                    st.session_state.pop("hosting_open", None)
+                                else:
+                                    st.error(err or "취소 실패")
+                                st.rerun()
+                        with c2:
+                            if st.button("아니요(유지)", use_container_width=True):
+                                st.session_state["confirm_cancel_open"] = False
+                                st.session_state["pause_refresh"] = False
+                                st.rerun()
+
+                    _confirm_cancel_dialog()
             else:
                 status_text = {
                     "Free": f"{('점심' if meal=='lunch' else '저녁')} 약속 없어요(불러주세요) 🟢",

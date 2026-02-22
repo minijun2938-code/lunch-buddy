@@ -1310,7 +1310,7 @@ def cancel_booking_for_user(user_id: int, *, meal: str = "lunch") -> tuple[bool,
     if groups:
         _gid, _date, host_uid, _host_name, _member_names, _seats_left, _menu, _payer_name, _g_kind = groups[0]
         members = list_group_members(host_uid, today, meal=meal)
-        member_ids = [uid for uid, _n in members]
+        member_ids = [uid for uid, _n, _en in members]
 
         if len(member_ids) <= 2:
             # cancel entire booking
@@ -1363,7 +1363,7 @@ def cancel_booking_for_user(user_id: int, *, meal: str = "lunch") -> tuple[bool,
     if not row:
         conn.close()
         # fallback: just clear me
-        clear_status_today(user_id)
+        clear_status_today(user_id, meal=meal)
         return True, None
 
     req_id, from_uid, to_uid = row
@@ -1373,10 +1373,10 @@ def cancel_booking_for_user(user_id: int, *, meal: str = "lunch") -> tuple[bool,
     conn.commit()
     conn.close()
 
-    clear_status_today(user_id)
-    clear_status_today(other)
-    cancel_pending_requests_for_user(user_id)
-    cancel_pending_requests_for_user(other)
+    clear_status_today(user_id, meal=meal)
+    clear_status_today(other, meal=meal)
+    cancel_pending_requests_for_user(user_id, meal=meal)
+    cancel_pending_requests_for_user(other, meal=meal)
     return True, None
 
 
