@@ -184,9 +184,7 @@ def main():
                     _uid, uname, ename, _chat, team, role, _mbti, _age, years, emp, _salt, _ph = urow
                     with st.form("profile_edit_form"):
                         new_team = st.text_input("팀명", value=team or "", key="pf_team")
-                        # 연차는 DB에는 유지하되, 대시보드(프로필 UI)에서는 노출하지 않음
-                        # new_years = st.number_input("연차", min_value=0, max_value=60, value=int(years or 0), step=1, key="pf_years")
-                        new_years = int(years or 0)
+                        new_years = st.number_input("연차", min_value=0, max_value=60, value=int(years or 0), step=1, key="pf_years")
                         new_name = st.text_input("한글이름", value=uname or "", key="pf_name")
                         new_en = st.text_input("영어이름", value=ename or "", key="pf_en")
                         st.caption(f"사번(변경불가): {emp}")
@@ -275,9 +273,7 @@ def main():
                 su_team = st.text_input("팀명", key="su_team")
                 su_role = st.selectbox("직급", ["팀원", "팀장", "임원"], index=0, key="su_role")
                 # MBTI/나이는 입력받지 않음 (단순화)
-                # 연차는 가입 단계에서 입력받지 않음(통계용으로만 추후 수집)
-                su_years = 1
-                # su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1, key="su_years")
+                su_years = st.number_input("연차", min_value=0, max_value=60, value=1, step=1, key="su_years")
                 su_emp = st.text_input("사번 (예: sl55555)", key="su_emp")
                 su_pin = st.text_input("비밀번호(PIN, 숫자 4자리)", type="password", key="su_pin")
                 su_pin2 = st.text_input("비밀번호 확인", type="password", key="su_pin2")
