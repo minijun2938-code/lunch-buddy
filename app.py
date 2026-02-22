@@ -100,7 +100,8 @@ def main():
     st.caption(f"오늘 날짜: {today_str}")
 
     # Dinner mode: force dark-ish UI via CSS (Streamlit theme can't be switched per-run)
-    if st.session_state["meal"] == "dinner":
+    # Apply to both public dinner and private dinner (dinner_p)
+    if "dinner" in st.session_state["meal"]:
         st.markdown(
             """
             <style>
