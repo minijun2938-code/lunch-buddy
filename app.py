@@ -361,7 +361,7 @@ def main():
                         st.session_state["confirm_cancel_shown_once"] = True
             else:
                 status_text = {
-                    "Free": f"{('점심' if meal=='lunch' else '저녁')} 약속 없어요(불러주세요) 🟢",
+                    "Free": f"{('점심' if meal=='lunch' else '저녁')} 약속 없어요(불러주세요) 🙇‍♂️",
                     "Hosting": f"오늘 {('점심' if meal=='lunch' else '저녁')} 같이 하실분? 모집중 🧑‍🍳",
                     "Planning": f"{('점심' if meal=='lunch' else '저녁')} 약속 잡는 중 🟠",
                     "Skip": "오늘은 넘어갈게요 (미참여) 🙅",
@@ -498,7 +498,7 @@ def main():
                 if is_lunch:
                     # 점심: 팀장/임원은 비활성화 유지
                     free_disabled = base_free_disabled or (role in ("팀장", "임원"))
-                    if st.button("🟢 점약 없어요 불러주세요", use_container_width=True, disabled=free_disabled):
+                    if st.button("🙇‍♂️ 점약 없어요 불러주세요", use_container_width=True, disabled=free_disabled):
                         db.update_status(user_id, "Free", meal=meal)
                         st.rerun()
                     if role in ("팀장", "임원"):
@@ -765,7 +765,7 @@ def main():
 
             st.markdown("---")
 
-            st.markdown("### 🟢 불러주세요")
+            st.markdown("### 🙇‍♂️ 불러주세요")
 
             host_group = db.get_group_by_host_today(user_id, meal=meal)
 
