@@ -615,13 +615,29 @@ def main():
                                 )
 
                             chat_html = f"""
-        <div id='lb-chat-box' style='height:280px; overflow-y:auto; border:1px solid rgba(49,51,63,0.18); border-radius:8px;'>
+        <div id='lb-chat-box' style='height:280px; overflow-y:auto; border:1px solid rgba(128,128,128,0.25); border-radius:8px;'>
           {''.join(items)}
         </div>
         <style>
-        .lb-chat-item{{padding:6px 8px;border-bottom:1px solid rgba(49,51,63,0.12);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;}}
-        .lb-chat-meta{{font-size:12px;opacity:0.75;line-height:1.15;margin-bottom:2px;}}
-        .lb-chat-msg{{font-size:14px;line-height:1.25;margin:0;}}
+        .lb-chat-item{{
+            padding:6px 8px;
+            border-bottom:1px solid rgba(128,128,128,0.15);
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;
+            color: {('#e5e7eb' if meal=='dinner' else '#111827')} !important;
+        }}
+        .lb-chat-meta{{
+            font-size:12px;
+            opacity:0.65;
+            line-height:1.15;
+            margin-bottom:2px;
+            color: {('#e5e7eb' if meal=='dinner' else '#111827')} !important;
+        }}
+        .lb-chat-msg{{
+            font-size:14px;
+            line-height:1.25;
+            margin:0;
+            color: {('#f9fafb' if meal=='dinner' else '#111827')} !important;
+        }}
         </style>
         <script>
           const el = document.getElementById('lb-chat-box');
