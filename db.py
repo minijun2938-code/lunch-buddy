@@ -1308,7 +1308,7 @@ def cancel_booking_for_user(user_id: int, *, meal: str = "lunch") -> tuple[bool,
 
     groups = get_groups_for_user_on_date(user_id, today, meal=meal)
     if groups:
-        _gid, _date, host_uid, _host_name, _member_names, _seats_left, _menu, _payer_name = groups[0]
+        _gid, _date, host_uid, _host_name, _member_names, _seats_left, _menu, _payer_name, _g_kind = groups[0]
         members = list_group_members(host_uid, today, meal=meal)
         member_ids = [uid for uid, _n in members]
 
