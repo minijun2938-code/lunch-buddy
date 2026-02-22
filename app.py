@@ -417,7 +417,7 @@ def main():
 
                         text = st.chat_input("메시지 입력…")
                         if text:
-                            ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), text, today_str)
+                            ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), text, today_str, meal=meal)
                             if not ok:
                                 st.error(err or "전송 실패")
                             st.rerun()
