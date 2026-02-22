@@ -61,6 +61,24 @@ with st.sidebar:
             db.add_ai_suggestion("R&D 기술 언어 현지화", "Marketing과 R&D가 협업하여 복잡한 기유 기술 용어를 영업용 언어로 번역한 'Enmove 브로슈어'를 공동 제작합니다.")
             st.rerun()
 
+        if st.button("🧪 성능테스트용 예시 데이터 넣기"):
+            samples = [
+                # Bottlenecks
+                ("M", "R", "Bottleneck", "커뮤니케이션", "기술 용어가 너무 어려워서 메시지로 못 바꾸겠음", "신규 윤활유 제품 캠페인 초안 작성 단계", "광고/영업 자료 제작 지연, 고객 커뮤니케이션 품질 저하", 4, 2),
+                ("P", "M", "Bottleneck", "요구사항", "시장/고객 요구 변경이 현장에 너무 늦게 공유됨", "긴급 발주/스펙 변경 발생 시", "생산 스케줄 재조정 비용 증가, 납기 리스크", 5, 3),
+                ("R", "P", "Bottleneck", "프로세스", "시험 배합을 현장 검증까지 넘기는 절차가 너무 길다", "실험 배합 검증 후 파일럿 생산 전환 시", "상용화 리드타임 증가, 경쟁력 약화", 4, 4),
+                ("S", "P", "Bottleneck", "리소스", "설비/구매 관련 협업 요청이 건별로 흩어져 누락됨", "정기보수/부품 교체 요청이 몰릴 때", "다운타임 증가, 비용 예측 어려움", 3, 3),
+                # Synergies
+                ("M", "P", "Synergy", "데이터", "공정 데이터 기반 ‘Energy Saving’ 고객 제안서 패키지", "주요 고객사 기술 미팅 준비", "고객 신뢰 상승, 차별화된 기술영업 강화", 5, 3),
+                ("P", "R", "Synergy", "데이터", "품질 이상 징후 조기탐지(공정+랩 데이터) 룰셋 공동 구축", "품질 이슈 발생 전 사전 감지", "불량/클레임 감소, 안정 생산", 4, 4),
+                ("R", "M", "Synergy", "커뮤니케이션", "연구소-마케팅 ‘월 1회 기술 브리핑’으로 스토리라인 합의", "분기별 제품/기술 로드맵 공유", "브랜드 메시지 일관성 확보", 4, 2),
+                ("S", "M", "Synergy", "툴/인프라", "협업 포털(문서/티켓/회의록) 단일화로 커뮤니케이션 비용 절감", "프로젝트 진행 중 자료가 분산될 때", "의사결정 속도 개선, 누락 감소", 3, 2),
+            ]
+            for dept, target, cat, tag, summary, situation, impact, sev, eff in samples:
+                db.add_feedback(dept, target, cat, summary, tag=tag, situation=situation, impact=impact, severity=sev, effort=eff)
+            st.success("예시 데이터가 입력되었습니다.")
+            st.rerun()
+
 # Main Header
 st.title(f"🚀 SK Enmove: MPRS Synergy Sync 2026")
 
