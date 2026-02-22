@@ -280,7 +280,7 @@ def main():
         # --- Hosting cancel confirmation dialog ---
         @st.dialog("모집 취소 확인")
         def confirm_hosting_cancel(target_status, target_kind=None):
-            st.write(f"현재 모집 중인 {('점심' if meal=='lunch' else '저녁')} 그룹이 있습니다.")
+            st.write(f"현재 모집 중인 {base_label} 그룹이 있습니다.")
             st.write("새로운 상태로 변경하면 현재 모집글이 삭제됩니다. 정말 취소하시겠습니까?")
             c1, c2 = st.columns(2)
             with c1:
@@ -380,7 +380,7 @@ def main():
                     st.error("프로필 정보를 불러오지 못했어요.")
 
             st.markdown("---")
-            st.subheader(f"📚 {('점심' if meal=='lunch' else '저녁')} 기록")
+            st.subheader(f"📚 {base_label} 기록")
             sidebar_user_id = u["user_id"]
             dates = db.list_my_group_dates(sidebar_user_id, meal=meal)
             if dates:
@@ -389,7 +389,7 @@ def main():
                 if groups:
                     gid, gdate, host_uid, host_name, member_names, seats_left, menu, payer_name, _g_kind = groups[0]
                     members = db.list_group_members(host_uid, sel, meal=meal)
-                    st.write(f"**{sel} {('점심' if meal=='lunch' else '저녁')} 기록**")
+                    st.write(f"**{sel} {base_label} 기록**")
                     st.write(f"멤버: {', '.join([db.format_name(n, en) for _uid, n, en in members]) if members else (member_names or '-')}")
                     st.write(f"메뉴: {menu or '-'}")
                     if payer_name:
@@ -647,9 +647,9 @@ def main():
                         st.session_state["confirm_cancel_shown_once"] = True
             else:
                 status_text = {
-                    "Free": (f"{('점심' if meal=='lunch' else '저녁')} 약속 없어요(불러주세요) 🙇‍♂️" if meal=="lunch" else f"저녁 {('술' if my_kind=='drink' else '밥')} 가능해요!"),
-                    "Hosting": f"오늘 {('점심' if meal=='lunch' else '저녁')} 같이 하실분? 모집중 🧑‍🍳",
-                    "Planning": f"{('점심' if meal=='lunch' else '저녁')} 약속 잡는 중 🟠",
+                    "Free": (f"{base_label} 약속 없어요(불러주세요) 🙇‍♂️" if ("lunch" in meal) else f"저녁 {('술' if my_kind=='drink' else '밥')} 가능해요!"),
+                    "Hosting": f"오늘 {base_label} 같이 하실분? 모집중 🧑‍🍳",
+                    "Planning": f"{base_label} 약속 잡는 중 🟠",
                     "Skip": "오늘은 넘어갈게요 (미참여) 🙅",
                     "Not Set": "(미정)",
                 }.get(my_status, my_status)
@@ -972,10 +972,10 @@ def main():
             outgoing = db.list_outgoing_requests(user_id, meal=meal)
 
             confirmed = [r for r in incoming if r[3] == "accepted"] + [r for r in outgoing if r[3] == "accepted"]
-            st.subheader(f"📊 오늘 {('점심' if meal=='lunch' else '저녁')} 성사")
+            st.subheader(f"📊 오늘 {base_label} 성사")
             st.metric("성사 건수", len(confirmed))
 
-            st.subheader(f"📩 오늘 받은 {('점심' if meal=='lunch' else '저녁')} 초대")
+            st.subheader(f"📩 오늘 받은 {base_label} 초대")
             if not incoming:
                 st.caption("아직 받은 초대가 없어요.")
             else:
@@ -1052,7 +1052,7 @@ def main():
                                     db.update_request_status(req_id, "declined")
                                     st.rerun()
 
-            st.subheader(f"📤 오늘 내가 보낸 {('점심' if meal=='lunch' else '저녁')} 초대")
+            st.subheader(f"📤 오늘 내가 보낸 {base_label} 초대")
             if not outgoing:
                 st.caption("아직 보낸 초대가 없어요.")
             else:
