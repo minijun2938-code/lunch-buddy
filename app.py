@@ -417,9 +417,11 @@ def main():
                     # --- Members-only chat ---
                     with st.expander("💬 멤버 채팅 (메뉴/시간 정하기)", expanded=True):
                         realtime = st.toggle("실시간 업데이트(3초)", value=True, key=f"rt_{host_uid}")
-                        if realtime:
-                            # rerun without full page refresh; keeps widget/session state
-                            st_autorefresh(interval=3000, key=f"chat_refresh_{host_uid}")
+                        # If user is typing, don't autorefresh (it disrupts input)
+                        typing_key = f"chat_msg_{host_uid}_{meal}"
+                        is_typing = bool(st.session_state.get(typing_key, ""))
+                        if realtime and (not is_typing):
+                            st_autorefresh(interval=3000, key=f"chat_refresh_{host_uid}_{meal}")
 
                         chat_rows = db.list_group_chat(host_uid, today_str, meal=meal, limit=200)
                         if not chat_rows:
@@ -452,11 +454,17 @@ def main():
         """
                             st.components.v1.html(chat_html, height=300)
 
-                        text = st.chat_input("메시지 입력…")
-                        if text:
-                            ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), text, today_str, meal=meal)
+                        # Use text_input + send button (st.chat_input is fragile with autorefresh)
+                        msg_key = f"chat_msg_{host_uid}_{meal}"
+                        msg = st.text_input("메시지", key=msg_key, placeholder="메시지 입력…")
+                        send = st.button("전송", key=f"send_{host_uid}_{meal}")
+                        if send:
+                            ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), msg, today_str, meal=meal)
                             if not ok:
                                 st.error(err or "전송 실패")
+                            else:
+                                # clear input
+                                st.session_state[msg_key] = ""
                             st.rerun()
                 else:
                     # 1:1 booked detail (no group) → auto-create a 1:1 group so details can be stored/shown
