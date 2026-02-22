@@ -230,8 +230,9 @@ def main():
         st.caption(f"ver {APP_VERSION}")
         st.header("🔐 회원가입 / 로그인")
 
-        # Meal toggle: place it right under login section, above profile
-        st.toggle("🌙 저녁 모드", value=(st.session_state["meal"] == "dinner"), key="meal_toggle")
+        # Meal toggle: label reflects current mode
+        toggle_label = "🌙 저녁 모드" if st.session_state.get("meal_toggle") else "☀️ 점심 모드"
+        st.toggle(toggle_label, value=(st.session_state["meal"] == "dinner"), key="meal_toggle")
         # (State is updated at the top of main() on the next rerun triggered by this toggle)
 
         if "user" in st.session_state:
