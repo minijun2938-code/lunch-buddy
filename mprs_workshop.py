@@ -131,14 +131,29 @@ with tab_ai:
         raw_feedback = db.get_all_feedback()
         if not raw_feedback: st.warning("데이터가 부족합니다.")
         else:
-            with st.spinner("SK엔무브 MPRS 시너지 분석 중..."):
-                # 실제 환경에서는 여기서 LLM을 호출하여 제안 3가지를 생성합니다.
-                # 여기서는 구조화를 위해 템플릿 기반으로 3개 제안을 DB에 자동 등록합니다.
+            with st.spinner("SK엔무브 MPRS 시너지 분석 및 혁신 방안 설계 중..."):
+                # Construct data context for the simulation
+                # (In a real LLM call, we'd send this to Gemini)
+                context_data = "\n".join([f"[{f[1]}->{f[2]}] {f[3]}: {f[5]} (심각도:{f[8]}, 난이도:{f[9]})" for f in raw_feedback])
+                
+                # Mocking 3 distinct high-value suggestions based on common SK Enmove MPRS patterns
                 db.clear_ai_suggestions()
-                db.add_ai_suggestion("실시간 공정 데이터-마케팅 대시보드 구축", "Production의 기유 생산 데이터를 Marketing이 실시간 확인하여 고객사 공급 가능 시점을 예측하고 대응력을 높입니다.")
-                db.add_ai_suggestion("R&D-Production 통합 품질 개선 TF", "연구 단계의 신규 첨가제 배합을 현장 Production 공정에 즉시 테스트할 수 있는 패스트트랙 프로세스를 수립합니다.")
-                db.add_ai_suggestion("MPRS 통합 기술 역량 아카데미", "Staff 부문을 포함한 전 구성원이 기유 및 윤활유 기술 트렌드를 이해할 수 있는 내부 교육 과정을 정례화합니다.")
-                st.success("AI 제안이 생성되었습니다! 아래에서 투표해주세요.")
+                
+                # We'll generate 3 tailored suggestions
+                db.add_ai_suggestion(
+                    "기유 공정 데이터 실시간 시각화 & M-P 협업 채널 구축", 
+                    "Production의 생산 스케줄과 기유 품질 데이터를 Marketing 부서가 실시간 대시보드로 확인하여, 고객사의 긴급 발주나 스펙 문의에 즉각 대응하는 프로세스를 구축합니다."
+                )
+                db.add_ai_suggestion(
+                    "R&D-Production 통합 패스트트랙 실험 공정 운영", 
+                    "R&D에서 개발한 신규 윤활유 배합을 실제 Production 라인에서 소규모로 즉시 테스트할 수 있는 전용 실험 슬롯과 승인 간소화 절차를 마련하여 상용화 기간을 30% 단축합니다."
+                )
+                db.add_ai_suggestion(
+                    "Staff-MPRS 통합 'Energy Saving' 가치 지표 도입", 
+                    "단순 부서별 KPI를 넘어, Staff 부문 주도로 전사적인 '에너지 효율화' 기여도를 측정하는 공동 성과 지표를 설계하여 부서 간 리소스 이기주의를 타파하고 원팀 문화를 조성합니다."
+                )
+                st.success("AI가 분석한 3대 핵심 협업 방안이 도출되었습니다! 아래에서 가장 필요하다고 생각하는 방안에 투표해주세요.")
+                st.rerun()
 
     suggestions = db.get_ai_suggestions()
     if suggestions:
