@@ -267,6 +267,24 @@ def main():
         st.toggle(toggle_label, value=(st.session_state["meal"] == "dinner"), key="meal_toggle")
         # (State is updated at the top of main() on the next rerun triggered by this toggle)
 
+        # --- Hosting cancel confirmation dialog ---
+        @st.dialog("모집 취소 확인")
+        def confirm_hosting_cancel(target_status, target_kind=None):
+            st.write(f"현재 모집 중인 {('점심' if meal=='lunch' else '저녁')} 그룹이 있습니다.")
+            st.write("새로운 상태로 변경하면 현재 모집글이 삭제됩니다. 정말 취소하시겠습니까?")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("예, 취소합니다", use_container_width=True):
+                    db.clear_status_today(user_id, meal=meal) # deletes group
+                    if target_status == "Free":
+                        db.update_status(user_id, "Free", meal=meal, kind=target_kind)
+                    elif target_status == "Skip":
+                        db.update_status(user_id, "Skip", meal=meal)
+                    st.rerun()
+            with c2:
+                if st.button("아니오", use_container_width=True):
+                    st.rerun()
+
         if "user" in st.session_state:
             u = st.session_state["user"]
             name = db.format_name(u.get('username',''), u.get('english_name',''))
@@ -736,21 +754,27 @@ def main():
                     # 점심: 팀장/임원은 비활성화 유지
                     free_disabled = base_free_disabled or (role in ("팀장", "임원")) or expired
                     if st.button("🙇‍♂️ 점약 없어요 불러주세요", use_container_width=True, disabled=free_disabled):
-                        if my_status == "Free":
+                        if my_status == "Hosting":
+                            confirm_hosting_cancel("Free")
+                        elif my_status == "Free":
                             db.clear_status_today(user_id, meal=meal)
+                            st.rerun()
                         else:
                             db.update_status(user_id, "Free", meal=meal)
-                        st.rerun()
+                            st.rerun()
                     if role in ("팀장", "임원"):
                         st.caption("(점심은 팀장/임원 '불러주세요' 비활성화)")
                 else:
                     # 저녁: 모두 가능 + 밥/술 구분
                     if st.button("🍚 저녁 밥 가능", use_container_width=True, disabled=(base_free_disabled or expired)):
-                        if my_status == "Free" and my_kind == "meal":
+                        if my_status == "Hosting":
+                            confirm_hosting_cancel("Free", "meal")
+                        elif my_status == "Free" and my_kind == "meal":
                             db.clear_status_today(user_id, meal=meal)
+                            st.rerun()
                         else:
                             db.update_status(user_id, "Free", meal=meal, kind="meal")
-                        st.rerun()
+                            st.rerun()
 
             with c2:
                 if is_lunch:
@@ -759,18 +783,24 @@ def main():
                         use_container_width=True,
                         disabled=(db.get_status_today(user_id, meal=meal) == "Booked"),
                     ):
-                        if my_status == "Skip":
+                        if my_status == "Hosting":
+                            confirm_hosting_cancel("Skip")
+                        elif my_status == "Skip":
                             db.clear_status_today(user_id, meal=meal)
+                            st.rerun()
                         else:
                             db.update_status(user_id, "Skip", meal=meal)
-                        st.rerun()
+                            st.rerun()
                 else:
                     if st.button("🍻 저녁 술 가능", use_container_width=True, disabled=(base_free_disabled or expired)):
-                        if my_status == "Free" and my_kind == "drink":
+                        if my_status == "Hosting":
+                            confirm_hosting_cancel("Free", "drink")
+                        elif my_status == "Free" and my_kind == "drink":
                             db.clear_status_today(user_id, meal=meal)
+                            st.rerun()
                         else:
                             db.update_status(user_id, "Free", meal=meal, kind="drink")
-                        st.rerun()
+                            st.rerun()
 
             with c3:
                 host_label = "🧑‍🍳 오늘 점심 같이 드실분?" if is_lunch else "🌙 오늘 저녁 같이 하실분?"
