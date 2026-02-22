@@ -26,7 +26,7 @@ with st.sidebar:
     st.title("🤝 MPRS Workshop")
     st.info("2026년 협업 고도화를 위한 아이콘들의 목소리")
     
-    dept_choice = st.selectbox("당신의 부문(Icon)을 선택하세요", ["M (Marketing)", "P (Product)", "R (R&D)", "S (Sales)"])
+    dept_choice = st.selectbox("당신의 부문(Icon)을 선택하세요", ["M (Marketing)", "P (Production)", "R (R&D)", "S (Staff)"])
     st.divider()
     
     admin_code = st.text_input("Admin Code (데이터 초기화용)", type="password")
@@ -59,7 +59,7 @@ with tab_speak:
     with col2:
         with st.form("synergy_form", clear_on_submit=True):
             st.success("🌟 시너지 아이디어 (함께하고 싶은 일)")
-            content = st.text_area("우리가 힘을 합치면 이런 것도 해볼 수 있을 것 같아요!", placeholder="예: Product의 사용성 데이터를 Sales가 고객 제안서에 바로 녹이면 좋겠어요.")
+            content = st.text_area("우리가 힘을 합치면 이런 것도 해볼 수 있을 것 같아요!", placeholder="예: Production의 사용성 데이터를 Staff가 대외 협력 자료에 바로 녹이면 좋겠어요.")
             submitted = st.form_submit_button("아이디어 등록")
             if submitted and content:
                 db.add_feedback(dept_choice[0], "Synergy", content)
@@ -74,7 +74,7 @@ with tab_board:
     else:
         # Filter buttons
         f_col1, f_col2, f_col3 = st.columns(3)
-        with f_col1: filter_dept = st.multiselect("부서 필터", ["M", "P", "R", "S"], default=["M", "P", "R", "S"])
+        with f_col1: filter_dept = st.multiselect("부서 필터", ["M", "P", "R", "S"], default=["M", "P", "R", "S"], help="M: Marketing, P: Production, R: R&D, S: Staff")
         with f_col2: filter_cat = st.multiselect("카테고리 필터", ["Bottleneck", "Synergy"], default=["Bottleneck", "Synergy"])
         
         for dept, cat, content, ts in all_data:
@@ -112,8 +112,8 @@ with tab_ai:
                 st.markdown("""
                 #### 🛠️ 부문별 핵심 액션 아이템
                 1. **Marketing**: R&D 실무자와 주간 '커피 챗'을 통해 최신 기술 트렌드 미리 파악.
-                2. **Product**: Sales의 현장 피드백을 주 1회 백로그에 공식 반영.
+                2. **Production**: Staff 부서의 인프라 지원 요청을 주 1회 정기 검토.
                 3. **R&D**: 비개발 부서를 위한 '1줄 기술 요약' 공유 채널 운영.
-                4. **Sales**: 고객사의 페인포인트를 데이터화하여 Product팀에 매달 전달.
+                4. **Staff**: 현장의 리소스 부족 및 행정 병목을 데이터화하여 Production팀에 공유.
                 """)
                 st.balloons()
