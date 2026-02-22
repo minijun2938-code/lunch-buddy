@@ -74,12 +74,17 @@ def main():
         st.stop()
 
     # --- Meal state initialization ---
+    if "meal" not in st.session_state:
+        # Default to dinner after 2 PM (14:00) KST
+        now_kst = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=9)
+        if now_kst.hour >= 14:
+            st.session_state["meal"] = "dinner"
+        else:
+            st.session_state["meal"] = "lunch"
+
     # We use the toggle value directly if it exists in session_state to avoid lag.
     if "meal_toggle" in st.session_state:
         st.session_state["meal"] = "dinner" if st.session_state["meal_toggle"] else "lunch"
-    
-    if "meal" not in st.session_state:
-        st.session_state["meal"] = "lunch"
 
     meal = st.session_state["meal"]
     meal_label = "점심" if meal == "lunch" else "저녁"
@@ -219,12 +224,22 @@ def main():
 
             /* Toggle: Streamlit toggles can be hard to see in forced light mode */
             [data-testid="stWidgetLabel"] p { color: #111827 !important; font-weight: 500 !important; }
+            
+            /* The track (background) of the toggle */
             div[data-testid="stCheckbox"] div[role="switch"] {
-                background-color: rgba(0, 0, 0, 0.1) !important;
-                border: 1px solid rgba(0, 0, 0, 0.2) !important;
+                background-color: #cbd5e1 !important; /* light slate gray */
+                border: 2px solid #64748b !important; /* darker border */
             }
+            /* The handle (circle) of the toggle */
+            div[data-testid="stCheckbox"] div[role="switch"] > div {
+                background-color: #1e293b !important; /* very dark handle when off */
+            }
+            /* When checked (ON) */
             div[data-testid="stCheckbox"] div[role="switch"][aria-checked="true"] {
-                background-color: #007bff !important;
+                background-color: #2563eb !important; /* blue track */
+            }
+            div[data-testid="stCheckbox"] div[role="switch"][aria-checked="true"] > div {
+                background-color: #ffffff !important; /* white handle when on */
             }
 
             /* Metric text */
