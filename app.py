@@ -460,7 +460,7 @@ def main():
         """
                             st.components.v1.html(chat_html, height=300)
 
-                        # Use text_input + send button with callback (handles Enter + clearing)
+                        # Layout chat input and send button in one row
                         msg_key = f"chat_msg_{host_uid}_{meal}"
 
                         def on_chat_submit():
@@ -472,8 +472,11 @@ def main():
                                 else:
                                     st.error(err or "전송 실패")
 
-                        st.text_input("메시지", key=msg_key, placeholder="메시지 입력…", on_change=on_chat_submit)
-                        st.button("전송", key=f"send_{host_uid}_{meal}", on_click=on_chat_submit)
+                        chat_col1, chat_col2 = st.columns([5, 1])
+                        with chat_col1:
+                            st.text_input("메시지", key=msg_key, placeholder="메시지 입력…", on_change=on_chat_submit, label_visibility="collapsed")
+                        with chat_col2:
+                            st.button("전송", key=f"send_{host_uid}_{meal}", on_click=on_chat_submit, use_container_width=True)
                 else:
                     # 1:1 booked detail (no group) → auto-create a 1:1 group so details can be stored/shown
                     if my_status == "Booked":
