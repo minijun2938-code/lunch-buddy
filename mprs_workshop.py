@@ -1,5 +1,5 @@
 import streamlit as st
-import mprs_db as db
+import db
 import os
 
 # Page Config
