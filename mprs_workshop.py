@@ -365,88 +365,88 @@ if tab_canvas is not None:
                 )
 
             st.markdown("---")
-            st.markdown("## 📄 협업방안 보고서 생성 (캔버스 기반)")
-            st.caption("AI/자동 생성 리포트는 ‘캔버스에 저장된 내용’만 사용해서 작성합니다. (아무말/추측 없음)")
+            st.markdown("## ✅ 논의 내용 정리 → To-do 뽑기 (캔버스 기반)")
+            st.caption("자동 생성 결과는 ‘캔버스에 저장된 내용’만 사용해서 To-do로 변환합니다. (추측/헛소리 없음)")
 
             items = db.get_action_items()
             if not items:
-                st.info("캔버스에 저장된 항목이 없어서 보고서를 만들 수 없습니다.")
+                st.info("캔버스에 저장된 항목이 없어서 To-do를 만들 수 없습니다.")
             else:
-                def _report_md(items_rows):
+                def _todo_md(items_rows):
                     # items: (feedback_id, category, from_dept, to_dept, summary, votes, idea1, idea2, idea3, tool, cadence, notes, created_at)
                     bn = [r for r in items_rows if r[1] == "Bottleneck"]
                     syn = [r for r in items_rows if r[1] == "Synergy"]
 
-                    def fmt_item(r):
+                    def todos_for(r):
                         fid, cat, f, t, summary, votes, i1, i2, i3, tool, cadence, notes, created_at = r
-                        lines = [
-                            f"### [{votes}표] {f}→{t} / {('병목' if cat=='Bottleneck' else '시너지')}",
-                            f"- 이슈/아이디어: {summary}",
-                        ]
                         ideas = [x for x in [i1, i2, i3] if x]
+
+                        header = f"### [{votes}표] {f}→{t} / {('병목' if cat=='Bottleneck' else '시너지')}"
+                        lines = [header, f"- 원문(요약): {summary}"]
+
+                        # To-do 생성 규칙: idea 1~3을 그대로 체크리스트로
+                        lines.append("- To-do:")
                         if ideas:
-                            lines.append("- 협업 아이디어:")
-                            lines += [f"  - {x}" for x in ideas]
+                            lines += [f"  - [ ] {x}" for x in ideas]
+                        else:
+                            lines.append("  - [ ] (캔버스에 아이디어가 비어있음) 아이디어 1~3을 채우기")
+
+                        # 운영용 옵션들은 별도 체크
                         if tool:
-                            lines.append(f"- 협업 툴/채널: {tool}")
+                            lines.append(f"  - [ ] 협업 툴/채널 세팅: {tool}")
                         if cadence:
-                            lines.append(f"- 회의/싱크: {cadence}")
+                            lines.append(f"  - [ ] 정기 싱크 운영 방식 확정: {cadence}")
                         if notes:
                             lines.append(f"- 메모: {notes}")
+
                         return "\n".join(lines)
 
-                    # Cross-cutting themes (very light heuristic)
+                    # Cross-cutting summary
                     tools = [r[9] for r in items_rows if r[9]]
                     cadences = [r[10] for r in items_rows if r[10]]
                     tool_hint = " / ".join(list(dict.fromkeys(tools))[:3])
                     cadence_hint = " / ".join(list(dict.fromkeys(cadences))[:3])
 
                     md = []
-                    md.append("# SK Enmove MPRS 협업방안 보고서 (Canvas 기반)")
+                    md.append("# SK Enmove MPRS Workshop - To-do List (Canvas 기반)")
                     md.append("")
-                    md.append("## 1) 요약")
-                    md.append(f"- 캔버스 저장 항목: {len(items_rows)}개 (병목 {len(bn)} / 시너지 {len(syn)})")
+                    md.append("## 1) 전체 To-do 요약")
+                    md.append(f"- 캔버스 항목: {len(items_rows)}개 (병목 {len(bn)} / 시너지 {len(syn)})")
                     if tool_hint:
-                        md.append(f"- 반복적으로 언급된 협업 툴/채널(상위): {tool_hint}")
+                        md.append(f"- 자주 언급된 협업 툴/채널(상위): {tool_hint}")
                     if cadence_hint:
-                        md.append(f"- 반복적으로 언급된 회의/싱크 방식(상위): {cadence_hint}")
+                        md.append(f"- 자주 언급된 회의/싱크(상위): {cadence_hint}")
                     md.append("")
 
-                    md.append("## 2) 병목 해결 제안 (득표순)")
+                    md.append("## 2) 병목 To-do (득표순)")
                     if not bn:
                         md.append("- (병목 항목 없음)")
                     else:
                         for r in bn:
-                            md.append(fmt_item(r))
+                            md.append(todos_for(r))
                             md.append("")
 
-                    md.append("## 3) 시너지 확대 제안 (득표순)")
+                    md.append("## 3) 시너지 To-do (득표순)")
                     if not syn:
                         md.append("- (시너지 항목 없음)")
                     else:
                         for r in syn:
-                            md.append(fmt_item(r))
+                            md.append(todos_for(r))
                             md.append("")
-
-                    md.append("## 4) 권장 운영 방식(워크샵 결과를 실행으로 연결)")
-                    md.append("- ‘실시간 보드’는 계속 열어두고, 월 1회(또는 주 1회) ‘캔버스 업데이트’ 시간을 고정")
-                    md.append("- From→To 단위로 정기 싱크를 운영하고, 회의록/결정사항은 협업 툴에 한 곳으로 누적")
-                    md.append("- 티켓/요청 흐름(접수→진행→완료)을 시각화해 누락을 줄이고, 데이터 공유는 ‘단일 화면’을 지향")
-                    md.append("")
 
                     return "\n".join(md)
 
-                if st.button("✨ 협업방안 보고서 생성", use_container_width=True):
-                    report = _report_md(items)
-                    st.session_state["canvas_report"] = report
+                if st.button("✨ To-do 생성", use_container_width=True):
+                    todo = _todo_md(items)
+                    st.session_state["canvas_todo"] = todo
 
-                report = st.session_state.get("canvas_report")
-                if report:
-                    st.markdown(report)
+                todo = st.session_state.get("canvas_todo")
+                if todo:
+                    st.markdown(todo)
                     st.download_button(
-                        "📥 보고서 다운로드 (Markdown)",
-                        data=report.encode("utf-8"),
-                        file_name="mprs_collaboration_report.md",
+                        "📥 To-do 다운로드 (Markdown)",
+                        data=todo.encode("utf-8"),
+                        file_name="mprs_todo.md",
                         mime="text/markdown",
                         use_container_width=True,
                     )
