@@ -38,7 +38,47 @@ def init_db():
     for col, ctype in new_cols.items():
         if col not in cols:
             c.execute(f"ALTER TABLE feedback ADD COLUMN {col} {ctype}")
+
+    # --- AI Suggestions table ---
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ai_suggestions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            content TEXT,
+            votes INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     
+    conn.commit()
+    conn.close()
+
+def add_ai_suggestion(title, content):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO ai_suggestions (title, content) VALUES (?, ?)", (title, content))
+    conn.commit()
+    conn.close()
+
+def vote_ai_suggestion(suggestion_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE ai_suggestions SET votes = votes + 1 WHERE id = ?", (suggestion_id,))
+    conn.commit()
+    conn.close()
+
+def get_ai_suggestions():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, title, content, votes FROM ai_suggestions ORDER BY votes DESC, created_at DESC")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def clear_ai_suggestions():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM ai_suggestions")
     conn.commit()
     conn.close()
 
