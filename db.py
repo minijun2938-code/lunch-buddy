@@ -398,6 +398,28 @@ def init_db():
            ON requests(date, meal, from_user_id)"""
     )
 
+    # Friends table (Private Mode)
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS friends (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requester_id INTEGER,
+            target_id INTEGER,
+            status TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(requester_id, target_id)
+        )
+        """
+    )
+    c.execute(
+        """CREATE INDEX IF NOT EXISTS idx_friends_target_status
+           ON friends(target_id, status)"""
+    )
+    c.execute(
+        """CREATE INDEX IF NOT EXISTS idx_friends_requester_status
+           ON friends(requester_id, status)"""
+    )
+
     conn.commit()
     conn.close()
 
@@ -411,6 +433,7 @@ def reset_all_data():
     c = conn.cursor()
     # order matters due to references
     for tbl in [
+        "friends",
         "requests",
         "auth_sessions",
         "group_members",
@@ -1969,3 +1992,98 @@ def list_outgoing_requests(user_id, *, meal: str = "lunch"):
     rows = c.fetchall()
     conn.close()
     return rows
+
+# --- Friend Management Logic ---
+
+def send_friend_request(from_uid: int, to_uid: int) -> tuple[bool, str | None]:
+    if from_uid == to_uid:
+        return False, "나 자신에게는 신청할 수 없어요."
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        # Check existing (either direction)
+        c.execute(
+            "SELECT status FROM friends WHERE (requester_id=? AND target_id=?) OR (requester_id=? AND target_id=?)",
+            (from_uid, to_uid, to_uid, from_uid),
+        )
+        row = c.fetchone()
+        if row:
+            return False, f"이미 신청 중이거나 친구 상태입니다. (상태: {row[0]})"
+
+        c.execute(
+            "INSERT INTO friends (requester_id, target_id, status) VALUES (?, ?, 'pending')",
+            (from_uid, to_uid),
+        )
+        conn.commit()
+        return True, None
+    except Exception as e:
+        return False, str(e)
+    finally:
+        conn.close()
+
+
+def accept_friend_request(target_uid: int, requester_uid: int) -> bool:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE friends SET status='accepted' WHERE requester_id=? AND target_id=? AND status='pending'",
+        (requester_uid, target_uid),
+    )
+    ok = c.rowcount > 0
+    conn.commit()
+    conn.close()
+    return ok
+
+
+def remove_friend(uid1: int, uid2: int):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "DELETE FROM friends WHERE (requester_id=? AND target_id=?) OR (requester_id=? AND target_id=?)",
+        (uid1, uid2, uid2, uid1),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_friends(user_id: int) -> list[int]:
+    """Return list of user_ids who are 'accepted' friends."""
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT requester_id FROM friends WHERE target_id=? AND status='accepted'
+            UNION
+            SELECT target_id FROM friends WHERE requester_id=? AND status='accepted'
+            """,
+            (user_id, user_id),
+        )
+        ids = [r[0] for r in c.fetchall()]
+        return ids
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
+def list_pending_requests(user_id: int) -> list[dict]:
+    """Requests sent TO me that I haven't accepted yet."""
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            """
+            SELECT f.requester_id, u.username, u.english_name, u.team
+            FROM friends f
+            JOIN users u ON f.requester_id = u.user_id
+            WHERE f.target_id=? AND f.status='pending'
+            """,
+            (user_id,),
+        )
+        rows = c.fetchall()
+        return [{"user_id": r[0], "username": r[1], "english_name": r[2], "team": r[3]} for r in rows]
+    except Exception:
+        return []
+    finally:
+        conn.close()
