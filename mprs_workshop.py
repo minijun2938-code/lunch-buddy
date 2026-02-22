@@ -82,7 +82,7 @@ with st.sidebar:
 # Main Header
 st.title("🚀 SK Enmove: MPRS Synergy Sync 2026")
 
-tab_speak, tab_board, tab_matrix = st.tabs(["🗣️ 의견 남기기", "📊 실시간 보드", "🎯 우선순위 매트릭스"])
+tab_speak, tab_bn, tab_syn, tab_matrix = st.tabs(["🗣️ 의견 남기기", "📉 병목 보드", "🌟 시너지 보드", "🎯 우선순위 매트릭스"])
 
 DEPT_MAP = {"M": "Marketing", "P": "Production", "R": "R&D", "S": "Staff"}
 TAGS = ["커뮤니케이션", "요구사항", "리소스", "권한", "프로세스", "툴/인프라", "데이터", "의사결정"]
@@ -127,72 +127,64 @@ with tab_speak:
                 db.add_feedback(syn_from, syn_target, "Synergy", syn_content, tag=syn_tag, situation=syn_situation, impact=syn_impact, severity=syn_sev, effort=syn_eff)
                 st.toast("등록되었습니다.")
 
-with tab_board:
+def render_board(category: str):
+    """category: 'Bottleneck' or 'Synergy'"""
     all_data = db.get_all_feedback()
-    if not all_data: st.caption("의견이 없습니다.")
-    else:
-        cols = st.columns(4)
-        for i, d_key in enumerate(["M", "P", "R", "S"]):
-            with cols[i]:
-                st.markdown(f"### {d_key} ({DEPT_MAP[d_key]})")
-                dept_feedback = [f for f in all_data if f[2] == d_key]
+    if not all_data:
+        st.caption("의견이 없습니다.")
+        return
 
-                bottlenecks = [f for f in dept_feedback if f[3] == "Bottleneck"]
-                synergies = [f for f in dept_feedback if f[3] == "Synergy"]
+    cols = st.columns(4)
+    for i, d_key in enumerate(["M", "P", "R", "S"]):
+        with cols[i]:
+            st.markdown(f"### {d_key} ({DEPT_MAP[d_key]})")
+            dept_feedback = [f for f in all_data if f[2] == d_key and f[3] == category]
 
-                # 위: 병목 / 아래: 시너지
-                st.markdown(f"#### 📉 병목 ({len(bottlenecks)})")
-                for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in bottlenecks:
-                    color_class = f"{source.lower()}-color"
-                    cat_class = "bottleneck-card"
-                    st.markdown(
-                        f"""<div class="status-card {color_class} {cat_class}">
-                        <div class="vote-count">👍 {likes}</div>
-                        <div class="from-label">From {source}  →  To {target} · {cat}</div>
-                        <strong>📉 {content}</strong><br/>
-                        <div class="tag-label">#{tag}</div>
-                        <div class="tag-label">Impact:{sev}</div>
-                        <div class="tag-label">Effort:{eff}</div>
-                        </div>""",
-                        unsafe_allow_html=True,
-                    )
-                    with st.expander("상세 보기", expanded=False):
-                        if sit:
-                            st.markdown(f"**상황**: {sit}")
-                        if imp:
-                            st.markdown(f"**영향/효과**: {imp}")
-                        st.caption(f"작성: {ts}")
-                    if st.button("👍 이 카드에 투표", key=f"v_{fid}", disabled=(fid in st.session_state["voted_items"])):
-                        db.add_vote(fid)
-                        st.session_state["voted_items"].add(fid)
-                        st.rerun()
+            if not dept_feedback:
+                st.caption("접수된 의견 없음")
+                continue
 
-                st.markdown("---")
-                st.markdown(f"#### 🌟 시너지 ({len(synergies)})")
-                for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in synergies:
-                    color_class = f"{source.lower()}-color"
-                    cat_class = "synergy-card"
-                    st.markdown(
-                        f"""<div class="status-card {color_class} {cat_class}">
-                        <div class="vote-count">👍 {likes}</div>
-                        <div class="from-label">From {source}  →  To {target} · {cat}</div>
-                        <strong>🌟 {content}</strong><br/>
-                        <div class="tag-label">#{tag}</div>
-                        <div class="tag-label">Impact:{sev}</div>
-                        <div class="tag-label">Effort:{eff}</div>
-                        </div>""",
-                        unsafe_allow_html=True,
-                    )
-                    with st.expander("상세 보기", expanded=False):
-                        if sit:
-                            st.markdown(f"**상황**: {sit}")
-                        if imp:
-                            st.markdown(f"**영향/효과**: {imp}")
-                        st.caption(f"작성: {ts}")
-                    if st.button("👍 이 카드에 투표", key=f"v_{fid}", disabled=(fid in st.session_state["voted_items"])):
-                        db.add_vote(fid)
-                        st.session_state["voted_items"].add(fid)
-                        st.rerun()
+            for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in dept_feedback:
+                color_class = f"{source.lower()}-color"
+                cat_class = "bottleneck-card" if category == "Bottleneck" else "synergy-card"
+                icon = "📉" if category == "Bottleneck" else "🌟"
+
+                st.markdown(
+                    f"""<div class="status-card {color_class} {cat_class}">
+                    <div class="vote-count">👍 {likes}</div>
+                    <div class="from-label">From {source}  →  To {target} · {cat}</div>
+                    <strong>{icon} {content}</strong><br/>
+                    <div class="tag-label">#{tag}</div>
+                    <div class="tag-label">Impact:{sev}</div>
+                    <div class="tag-label">Effort:{eff}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+                with st.expander("상세 보기", expanded=False):
+                    if sit:
+                        st.markdown(f"**상황**: {sit}")
+                    if imp:
+                        st.markdown(f"**영향/효과**: {imp}")
+                    st.caption(f"작성: {ts}")
+
+                if st.button(
+                    "👍 이 카드에 투표",
+                    key=f"v_{fid}",
+                    disabled=(fid in st.session_state["voted_items"]),
+                ):
+                    db.add_vote(fid)
+                    st.session_state["voted_items"].add(fid)
+                    st.rerun()
+
+
+with tab_bn:
+    st.subheader("📉 병목 보드")
+    render_board("Bottleneck")
+
+with tab_syn:
+    st.subheader("🌟 시너지 보드")
+    render_board("Synergy")
 
 with tab_matrix:
     st.subheader("Impact vs Effort 분석")
