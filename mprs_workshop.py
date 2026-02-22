@@ -52,7 +52,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-DEPT_MAP = {"M": "Marketing", "P": "Production", "R": "R&D", "S": "Staff"}
+DEPT_MAP = {"ALL": "All", "M": "Marketing", "P": "Production", "R": "R&D", "S": "Staff"}
 TAGS = ["커뮤니케이션", "업무Process", "의사결정", "데이터권한", "툴or인프라", "기타"]
 
 # Sidebar
@@ -184,11 +184,14 @@ def render_board(category: str):
         st.caption("의견이 없습니다.")
         return
 
-    cols = st.columns(4)
-    for i, d_key in enumerate(["M", "P", "R", "S"]):
+    cols = st.columns(5)
+    for i, d_key in enumerate(["ALL", "M", "P", "R", "S"]):
         with cols[i]:
             st.markdown(f"### {d_key} ({DEPT_MAP[d_key]})")
-            dept_feedback = [f for f in all_data if f[2] == d_key and f[3] == category]
+            if d_key == "ALL":
+                dept_feedback = [f for f in all_data if f[3] == category]
+            else:
+                dept_feedback = [f for f in all_data if f[2] == d_key and f[3] == category]
 
             if not dept_feedback:
                 st.caption("접수된 의견 없음")
@@ -238,8 +241,8 @@ with tab_speak:
         with st.form("bottleneck_form", clear_on_submit=True):
             st.error("📉 병목 포인트")
             ft1, ft2 = st.columns(2)
-            bn_from = ft1.selectbox("From", ["M", "P", "R", "S"], key="bn_from")
-            bn_target = ft2.selectbox("To", ["M", "P", "R", "S"], key="bn_to")
+            bn_from = ft1.selectbox("From", ["ALL", "M", "P", "R", "S"], key="bn_from")
+            bn_target = ft2.selectbox("To", ["ALL", "M", "P", "R", "S"], key="bn_to")
             bn_tag = st.selectbox("분류", TAGS, key="bn_tag")
             bn_content = st.text_input("문제 (한 줄 요약)")
             bn_situation = st.text_area("구체적 상황 (언제/어디서?)")
@@ -265,8 +268,8 @@ with tab_speak:
         with st.form("synergy_form", clear_on_submit=True):
             st.success("🌟 시너지 아이디어")
             ft1, ft2 = st.columns(2)
-            syn_from = ft1.selectbox("From", ["M", "P", "R", "S"], key="syn_from")
-            syn_target = ft2.selectbox("To", ["M", "P", "R", "S"], key="syn_to")
+            syn_from = ft1.selectbox("From", ["ALL", "M", "P", "R", "S"], key="syn_from")
+            syn_target = ft2.selectbox("To", ["ALL", "M", "P", "R", "S"], key="syn_to")
             syn_tag = st.selectbox("분류", TAGS, key="syn_tag")
             syn_content = st.text_input("아이디어 (한 줄 요약)")
             syn_situation = st.text_area("구체적 상황 (언제/어디서?)")
