@@ -483,10 +483,20 @@ def main():
         admin_pw_conf = admin_pw_conf or os.environ.get("ADMIN_PASSWORD")
 
         st.subheader("🔐 관리자 로그인")
+        st.caption(
+            f"설정 상태: ADMIN_ID={'✅' if admin_id_conf else '❌'}, ADMIN_PASSWORD={'✅' if admin_pw_conf else '❌'} (Secrets 반영이 안 되면 Streamlit Cloud에서 재실행 필요)"
+        )
+
         aid = st.text_input("관리자 ID", key="admin_id_input")
         apw = st.text_input("관리자 PW", type="password", key="admin_pw_input")
+
         if st.button("로그인", key="admin_login_btn"):
-            if (aid == (admin_id_conf or "")) and (apw == (admin_pw_conf or "")):
+            aid_in = (aid or "").strip().lower()
+            apw_in = (apw or "").strip()
+            aid_conf = (str(admin_id_conf or "")).strip().lower()
+            apw_conf = (str(admin_pw_conf or "")).strip()
+
+            if aid_in and apw_in and (aid_in == aid_conf) and (apw_in == apw_conf):
                 st.session_state["is_admin"] = True
             else:
                 st.error("관리자 인증 실패")
