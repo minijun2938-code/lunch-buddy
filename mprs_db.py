@@ -192,3 +192,11 @@ def clear_db():
     c.execute("DELETE FROM feedback")
     conn.commit()
     conn.close()
+
+
+def clear_action_items():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM action_items")
+    conn.commit()
+    conn.close()

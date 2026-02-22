@@ -69,6 +69,7 @@ with st.sidebar:
 
         if st.button("🚨 모든 데이터 초기화"):
             db.clear_db()
+            db.clear_action_items()
             db.clear_ai_suggestions()
             db.set_state("canvas_open", "0")
             st.success("초기화 완료")
@@ -290,14 +291,14 @@ if tab_canvas is not None:
                     if impact:
                         st.write(f"**영향/효과:** {impact}")
 
-                    with st.form("canvas_form"):
+                    with st.form("canvas_form", clear_on_submit=True):
                         st.markdown("### 협업 아이디어(아이디어만)")
-                        idea1 = st.text_input("아이디어 1", placeholder="예: 협업 툴에 실시간 데이터 공유 보드를 만들고 링크/지표를 고정")
-                        idea2 = st.text_input("아이디어 2", placeholder="예: 마케팅-연구소 정기 회의(월 1회)로 기술 스토리라인 합의")
-                        idea3 = st.text_input("아이디어 3", placeholder="예: 요청/응답을 티켓으로 관리하고 상태를 공유")
-                        collab_tool = st.text_input("협업 툴/채널(선택)", placeholder="예: Slack/Teams + Confluence/Notion + Jira/Asana")
-                        meeting_cadence = st.text_input("회의/싱크 방식(선택)", placeholder="예: 주 1회 30분 / 월 1회 60분")
-                        notes = st.text_area("추가 메모(선택)")
+                        idea1 = st.text_input("아이디어 1", placeholder="예: 협업 툴에 실시간 데이터 공유 보드를 만들고 링크/지표를 고정", key="cv_idea1")
+                        idea2 = st.text_input("아이디어 2", placeholder="예: 마케팅-연구소 정기 회의(월 1회)로 기술 스토리라인 합의", key="cv_idea2")
+                        idea3 = st.text_input("아이디어 3", placeholder="예: 요청/응답을 티켓으로 관리하고 상태를 공유", key="cv_idea3")
+                        collab_tool = st.text_input("협업 툴/채널(선택)", placeholder="예: Slack/Teams + Confluence/Notion + Jira/Asana", key="cv_tool")
+                        meeting_cadence = st.text_input("회의/싱크 방식(선택)", placeholder="예: 주 1회 30분 / 월 1회 60분", key="cv_cadence")
+                        notes = st.text_area("추가 메모(선택)", key="cv_notes")
                         saved = st.form_submit_button("💾 캔버스 저장")
                         if saved:
                             db.upsert_action_item(
@@ -314,6 +315,9 @@ if tab_canvas is not None:
                                 meeting_cadence=meeting_cadence,
                                 notes=notes,
                             )
+                            # 입력 박스 초기화 (혹시 모를 캐시/리런 대비)
+                            for k in ["cv_idea1","cv_idea2","cv_idea3","cv_tool","cv_cadence","cv_notes"]:
+                                st.session_state[k] = ""
                             st.success("저장 완료")
                             st.rerun()
 
