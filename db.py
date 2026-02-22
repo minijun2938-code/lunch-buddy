@@ -1540,13 +1540,10 @@ def add_group_chat(host_user_id: int, user_id: int, username: str, message: str,
 def is_meal_expired(meal: str) -> bool:
     """Return True if current KST time is past the meal threshold.
     Lunch: 13:00 (1 PM), Dinner: 20:00 (8 PM)
+    
+    NOTE: Temporarily disabled for testing.
     """
-    now_kst = datetime.datetime.now(timezone.utc) + timedelta(hours=9)
-    hour = now_kst.hour
-    if _norm_meal(meal) == "lunch":
-        return hour >= 13
-    else:
-        return hour >= 20
+    return False
 
 
 def delegate_host(date_str: str, meal: str, old_host_id: int, new_host_id: int) -> tuple[bool, str | None]:
