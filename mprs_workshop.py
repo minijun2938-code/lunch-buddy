@@ -24,7 +24,7 @@ st.markdown("""
     .status-card { padding: 15px; border-radius: 10px; background-color: white; border-left: 10px solid #4A90E2; box-shadow: 2px 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; position: relative; }
     /* Category tint: Bottleneck vs Synergy */
     .bottleneck-card { background-color: #fff1f1; } /* light red tint */
-    .synergy-card { background-color: #fff9e6; }    /* light yellow tint */
+    .synergy-card { background-color: #ecfff2; }    /* light green tint */
 
     .ai-card { padding: 20px; border-radius: 10px; background-color: #f0f7ff; border: 1px solid #cce3ff; margin-bottom: 15px; position: relative; }
     .m-color { border-left-color: #ED1C24; } /* SK Red */
