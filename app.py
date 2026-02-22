@@ -883,7 +883,9 @@ def main():
                         db._rebuild_group_legacy_fields(user_id, today_str, meal=meal)
                     except Exception:
                         pass
+                    st.session_state["hosting_open"] = False # Close the form
                     st.success("저장 완료!")
+                    st.rerun()
 
             st.markdown("---")
 
