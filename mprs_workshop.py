@@ -459,11 +459,24 @@ if tab_todo is not None:
                 union = len(a | b)
                 return inter / union if union else 0.0
 
-            # Build text for similarity: summary + proposal
+            basis = st.radio(
+                "클러스터링 기준",
+                ["이슈(요약) 중심", "해결방안(제안) 중심"],
+                horizontal=True,
+                help="예시처럼 모든 조가 비슷한 해결 템플릿을 쓰면 '제안 중심'은 하나로 뭉칠 수 있어요. 보통은 '이슈(요약) 중심'이 안정적입니다.",
+            )
+
+            # Build text for similarity
             docs = []
             for r in items:
                 fid, author, cat, f, t, summary, votes, proposal, created_at = r
-                docs.append((r, _tokens(f"{summary} {proposal}")))
+                if basis.startswith("이슈"):
+                    # issue-centric: keep distinct problems even if proposals are templated
+                    text_for_sim = f"{cat} {f} {t} {summary}"
+                else:
+                    # proposal-centric: group similar solution ideas
+                    text_for_sim = f"{proposal} {summary}"
+                docs.append((r, _tokens(text_for_sim)))
 
             # Union-find clustering
             parent = list(range(len(docs)))
