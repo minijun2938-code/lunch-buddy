@@ -53,7 +53,7 @@ st.markdown(
 )
 
 DEPT_MAP = {"M": "Marketing", "P": "Production", "R": "R&D", "S": "Staff"}
-TAGS = ["커뮤니케이션", "요구사항", "리소스", "권한", "프로세스", "툴/인프라", "데이터", "의사결정"]
+TAGS = ["커뮤니케이션", "요구사항", "리소스", "권한", "프로세스", "툴/인프라", "데이터", "의사결정", "기타"]
 
 # Sidebar
 with st.sidebar:
