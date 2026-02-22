@@ -98,15 +98,15 @@ st.title("🚀 SK Enmove: MPRS Synergy Sync 2026")
 # Tabs (canvas tab is admin-toggled, shared via DB)
 canvas_open = db.get_state("canvas_open", "0") == "1"
 
-tabs = ["🗣️ 의견 남기기", "📉 병목 보드", "🌟 시너지 보드", "🎯 우선순위 매트릭스"]
+tabs = ["🗣️ 의견 남기기", "📉 병목 보드", "🌟 시너지 보드"]
 if canvas_open:
     tabs.append("🛠️ 아이디어 캔버스")
 
 _tab_objs = st.tabs(tabs)
 if canvas_open:
-    tab_speak, tab_bn, tab_syn, tab_matrix, tab_canvas = _tab_objs
+    tab_speak, tab_bn, tab_syn, tab_canvas = _tab_objs
 else:
-    tab_speak, tab_bn, tab_syn, tab_matrix = _tab_objs
+    tab_speak, tab_bn, tab_syn = _tab_objs
     tab_canvas = None
 
 
@@ -232,32 +232,10 @@ with tab_syn:
     render_board("Synergy")
 
 
-with tab_matrix:
-    st.subheader("Impact vs Effort 분석")
-    all_data = db.get_all_feedback()
-    if all_data:
-        m_df = pd.DataFrame(all_data, columns=["id", "from", "target", "cat", "tag", "content", "sit", "imp", "sev", "eff", "likes", "ts"])
-        import plotly.express as px
-
-        fig = px.scatter(
-            m_df,
-            x="eff",
-            y="sev",
-            color="cat",
-            size=[l + 1 for l in m_df["likes"]],
-            hover_name="content",
-            text="from",
-            range_x=[0, 6],
-            range_y=[0, 6],
-            color_discrete_map={"Bottleneck": "#ED1C24", "Synergy": "#00A651"},
-        )
-        # (0,0) 축만 표시
-        fig.add_hline(y=0, line_color="#111", line_width=2)
-        fig.add_vline(x=0, line_color="#111", line_width=2)
-
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption("축은 (0,0) 기준이며 값은 양수 영역(0~6)만 사용합니다.")
-
+# 우선순위 매트릭스 탭은 현재 숨김 처리 (요청 반영)
+if False:
+    with st.container():
+        st.subheader("Impact vs Effort 분석")
 
 # AI 전략 리포트 기능은 현재 숨김 처리 (요청 반영)
 if False:
