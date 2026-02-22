@@ -34,10 +34,15 @@ def send_telegram_msg(chat_id: str | None, text: str) -> bool:
 
 
 def get_bot_username() -> str | None:
-    """Read bot username from Streamlit secrets/env.
+    """Return bot username.
 
-    Needed for deep link: https://t.me/<username>?start=<payload>
+    Priority:
+    1) Streamlit secrets/env TELEGRAM_BOT_USERNAME
+    2) Telegram getMe API using TELEGRAM_BOT_TOKEN (auto-detect)
+
+    This reduces ops burden: you can deploy with only TELEGRAM_BOT_TOKEN.
     """
+    # 1) explicit config
     try:
         import streamlit as st
         u = st.secrets.get("TELEGRAM_BOT_USERNAME")
@@ -47,7 +52,25 @@ def get_bot_username() -> str | None:
         pass
 
     u = os.environ.get("TELEGRAM_BOT_USERNAME")
-    return (u or "").lstrip("@").strip() or None
+    u = (u or "").lstrip("@").strip()
+    if u:
+        return u
+
+    # 2) auto-detect via getMe
+    token = _get_bot_token()
+    if not token:
+        return None
+    try:
+        r = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if not data.get("ok"):
+            return None
+        username = (data.get("result") or {}).get("username")
+        return str(username).lstrip("@").strip() if username else None
+    except Exception:
+        return None
 
 
 def get_updates(offset: int | None = None, timeout: int = 0):

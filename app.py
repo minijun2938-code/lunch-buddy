@@ -168,27 +168,51 @@ def main():
             <style>
             /* ---- Lunch Light Mode (CSS override) ---- */
             :root{color-scheme:light;}
-            
+            html, body{background:#ffffff !important;}
+
             /* Backgrounds */
-            [data-testid="stAppViewContainer"]{background:#ffffff !important; color:#31333F !important;}
+            [data-testid="stAppViewContainer"]{background:#ffffff !important;}
             [data-testid="stSidebar"]{background:#f0f2f6 !important;}
-            
-            /* Text colors */
-            [data-testid="stMarkdownContainer"] *, p, li, span, label, div{
-                color:#31333F !important;
+
+            /* Global text */
+            [data-testid="stAppViewContainer"] *, [data-testid="stSidebar"] *{
+                color:#111827 !important; /* slate-900 */
             }
-            h1,h2,h3,h4,h5,h6{color:#1f2937 !important;}
-            
-            /* alerts (reset to default light) */
+            h1,h2,h3,h4,h5,h6{color:#0f172a !important;}
+
+            /* Inputs */
+            [data-baseweb="input"] input,
+            [data-baseweb="textarea"] textarea,
+            [data-baseweb="select"] div{
+                background:#ffffff !important;
+                color:#111827 !important;
+                border-color:rgba(17,24,39,0.18) !important;
+            }
+
+            /* Tabs */
+            [data-testid="stTabs"] button, [data-testid="stTabs"] *{color:#111827 !important;}
+
+            /* Buttons: keep clear contrast */
+            .stButton button, button[kind="primary"], button[kind="secondary"]{
+                background:#ffffff !important;
+                color:#111827 !important;
+                border:1px solid rgba(17,24,39,0.25) !important;
+            }
+            .stButton button *{color:#111827 !important; fill:#111827 !important;}
+
+            /* Alerts */
             [data-testid="stAlert"]{
               background:#f0f2f6 !important;
-              border:1px solid rgba(49,51,63,0.1) !important;
+              border:1px solid rgba(17,24,39,0.12) !important;
             }
-            [data-testid="stAlert"] *{color:#31333F !important;}
-            
+            [data-testid="stAlert"] *{color:#111827 !important;}
+
+            /* Containers/borders */
+            div[data-testid="stVerticalBlockBorderWrapper"]{border-color:rgba(17,24,39,0.12) !important;}
+
             /* Metric text */
-            [data-testid="stMetricValue"]{color:#31333F !important;}
-            
+            [data-testid="stMetricValue"], [data-testid="stMetricDelta"]{color:#111827 !important;}
+
             /* Expander */
             [data-testid="stExpander"] details{background:#ffffff !important;}
             </style>
