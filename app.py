@@ -423,6 +423,12 @@ def main():
                         if realtime and (not is_typing):
                             st_autorefresh(interval=3000, key=f"chat_refresh_{host_uid}_{meal}")
 
+                        # Defensive: ensure I'm registered as a member of this group (fixes "그룹 멤버만" send failures)
+                        try:
+                            db.ensure_member_in_group(int(host_uid), int(user_id), today_str, meal=meal)
+                        except Exception:
+                            pass
+
                         chat_rows = db.list_group_chat(host_uid, today_str, meal=meal, limit=200)
                         if not chat_rows:
                             st.caption("아직 대화가 없어요.")
@@ -461,11 +467,11 @@ def main():
                         if send:
                             ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), msg, today_str, meal=meal)
                             if not ok:
+                                # Don't rerun on error; otherwise the error message disappears instantly.
                                 st.error(err or "전송 실패")
                             else:
-                                # clear input
                                 st.session_state[msg_key] = ""
-                            st.rerun()
+                                st.rerun()
                 else:
                     # 1:1 booked detail (no group) → auto-create a 1:1 group so details can be stored/shown
                     if my_status == "Booked":
