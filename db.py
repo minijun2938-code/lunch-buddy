@@ -645,15 +645,30 @@ def format_name(username: str, english_name: str | None) -> str:
 
 
 def get_display_name(user_id: int) -> str:
-    """Format: {팀명} {이름 (영어이름)} {직급} where 직급 is PM (팀원) or 리더 (팀장/임원)."""
+    """Format: {팀명} {이름 (영어이름)} {직급}.
+
+    Defensive cleanup:
+    - If username/team accidentally contains a leading numeric prefix (e.g., "1 김희준"), strip it.
+    """
     u = get_user_by_id(int(user_id))
     if not u:
         return str(user_id)
 
     _uid, username, english_name, _chat, team, role, *_rest = u
-    team = (team or "").strip()
-    name = format_name(username, english_name)
 
+    import re
+
+    def _strip_leading_number(s: str | None) -> str:
+        s = (s or "").strip()
+        # "1 김희준" or "1. 김희준" or "[1] 김희준"
+        s = re.sub(r"^(\[?\(?\d+\]?\)?\.?\s+)", "", s)
+        return s.strip()
+
+    team = _strip_leading_number(team)
+    username = _strip_leading_number(username)
+    english_name = (english_name or "").strip()
+
+    name = format_name(username, english_name)
     mapped = "PM" if role == "팀원" else "리더"  # 팀장/임원 포함
     parts = [p for p in [team, name, mapped] if p]
     return " ".join(parts) if parts else name

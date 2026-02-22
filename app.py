@@ -189,6 +189,13 @@ def main():
                 border-color:rgba(17,24,39,0.18) !important;
             }
 
+            /* Header/top bar */
+            [data-testid="stHeader"], [data-testid="stToolbar"], header{
+                background:#ffffff !important;
+                color:#111827 !important;
+            }
+            [data-testid="stHeader"] *, [data-testid="stToolbar"] *{color:#111827 !important;}
+
             /* Tabs */
             [data-testid="stTabs"] button, [data-testid="stTabs"] *{color:#111827 !important;}
 
