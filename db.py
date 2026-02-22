@@ -803,6 +803,18 @@ def get_group_by_host_on_date(host_user_id: int, date_str: str, *, meal: str = "
         (date_str, meal, host_user_id),
     )
     row = c.fetchone()
+
+    # Defensive: ensure host is always a member (prevents chat/cancel issues)
+    if row:
+        try:
+            c.execute(
+                "INSERT OR IGNORE INTO group_members(date, meal, host_user_id, user_id) VALUES (?,?,?,?)",
+                (date_str, meal, int(host_user_id), int(host_user_id)),
+            )
+            conn.commit()
+        except Exception:
+            pass
+
     conn.close()
     return row
 
@@ -1311,6 +1323,22 @@ def cancel_booking_for_user(user_id: int, *, meal: str = "lunch") -> tuple[bool,
         _gid, _date, host_uid, _host_name, _member_names, _seats_left, _menu, _payer_name, _g_kind = groups[0]
         members = list_group_members(host_uid, today, meal=meal)
         member_ids = [uid for uid, _n, _en in members]
+
+        # If I'm the host and I cancel, dissolve the whole group (even if >2)
+        if int(host_uid) == int(user_id):
+            related_ids_list = sorted(list(set(member_ids)))
+            cancel_accepted_for_users(related_ids_list, meal=meal)
+            for uid in related_ids_list:
+                clear_status_today(int(uid), meal=meal)
+
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("DELETE FROM group_chat WHERE date=? AND meal=? AND host_user_id=?", (today, meal, host_uid))
+            c.execute("DELETE FROM group_members WHERE date=? AND meal=? AND host_user_id=?", (today, meal, host_uid))
+            c.execute("DELETE FROM lunch_groups WHERE date=? AND meal=? AND host_user_id=?", (today, meal, host_uid))
+            conn.commit()
+            conn.close()
+            return True, None
 
         if len(member_ids) <= 2:
             # cancel entire booking
