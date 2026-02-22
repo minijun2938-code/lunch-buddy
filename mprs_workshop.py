@@ -43,7 +43,7 @@ with st.sidebar:
     st.title("🤝 MPRS Workshop")
     st.info("SK엔무브 2026 협업 고도화를 위한 아이콘들의 목소리")
     
-    dept_choice = st.selectbox("당신의 부문(Icon)을 선택하세요", ["M (Marketing)", "P (Production)", "R (R&D)", "S (Staff)"])
+    st.caption("팁: 조별 대표 1명이 입력해도 됩니다. 의견 등록 시 From/To를 직접 선택하세요.")
     st.divider()
     
     st.write(f"보드 투표: {len(st.session_state['voted_items'])} (카드당 1표)")
@@ -80,7 +80,7 @@ with st.sidebar:
             st.rerun()
 
 # Main Header
-st.title(f"🚀 SK Enmove: MPRS Synergy Sync 2026")
+st.title("🚀 SK Enmove: MPRS Synergy Sync 2026")
 
 tab_speak, tab_board, tab_matrix = st.tabs(["🗣️ 의견 남기기", "📊 실시간 보드", "🎯 우선순위 매트릭스"])
 
@@ -89,11 +89,16 @@ TAGS = ["커뮤니케이션", "요구사항", "리소스", "권한", "프로세�
 
 with tab_speak:
     st.subheader("타 부서와 협업하며 느꼈던 솔직한 의견을 적어주세요.")
+    st.caption("이제 ‘내 부문 선택’ 없이, 의견 등록 시 From/To를 직접 선택합니다. (조별 대표 입력 가능)")
+
     col1, col2 = st.columns(2)
+
     with col1:
         with st.form("bottleneck_form", clear_on_submit=True):
             st.error("📉 병목 포인트 (불편했던 점)")
-            bn_target = st.radio("Target 부서", ["M", "P", "R", "S"], horizontal=True, key="bn_target")
+            ft1, ft2 = st.columns(2)
+            bn_from = ft1.selectbox("From", ["M", "P", "R", "S"], key="bn_from")
+            bn_target = ft2.selectbox("To", ["M", "P", "R", "S"], key="bn_to")
             bn_tag = st.selectbox("분류", TAGS, key="bn_tag")
             bn_content = st.text_input("문제 (한 줄 요약)")
             bn_situation = st.text_area("구체적 상황 (언제/어디서?)")
@@ -102,13 +107,15 @@ with tab_speak:
             bn_sev = sc1.slider("심각도 (1-5)", 1, 5, 3)
             bn_eff = sc2.slider("해결 난이도 (1-5)", 1, 5, 2)
             if st.form_submit_button("불편함 등록") and bn_content:
-                db.add_feedback(dept_choice[0], bn_target, "Bottleneck", bn_content, tag=bn_tag, situation=bn_situation, impact=bn_impact, severity=bn_sev, effort=bn_eff)
+                db.add_feedback(bn_from, bn_target, "Bottleneck", bn_content, tag=bn_tag, situation=bn_situation, impact=bn_impact, severity=bn_sev, effort=bn_eff)
                 st.toast("등록되었습니다.")
 
     with col2:
         with st.form("synergy_form", clear_on_submit=True):
             st.success("🌟 시너지 아이디어 (함께하고 싶은 일)")
-            syn_target = st.radio("Target 부서", ["M", "P", "R", "S"], horizontal=True, key="syn_target")
+            ft1, ft2 = st.columns(2)
+            syn_from = ft1.selectbox("From", ["M", "P", "R", "S"], key="syn_from")
+            syn_target = ft2.selectbox("To", ["M", "P", "R", "S"], key="syn_to")
             syn_tag = st.selectbox("분류", TAGS, key="syn_tag")
             syn_content = st.text_input("아이디어 (한 줄 요약)")
             syn_situation = st.text_area("기대 상황")
@@ -117,7 +124,7 @@ with tab_speak:
             syn_sev = sc1.slider("기대 효과 (1-5)", 1, 5, 4)
             syn_eff = sc2.slider("실행 난이도 (1-5)", 1, 5, 3)
             if st.form_submit_button("아이디어 등록") and syn_content:
-                db.add_feedback(dept_choice[0], syn_target, "Synergy", syn_content, tag=syn_tag, situation=syn_situation, impact=syn_impact, severity=syn_sev, effort=syn_eff)
+                db.add_feedback(syn_from, syn_target, "Synergy", syn_content, tag=syn_tag, situation=syn_situation, impact=syn_impact, severity=syn_sev, effort=syn_eff)
                 st.toast("등록되었습니다.")
 
 with tab_board:
