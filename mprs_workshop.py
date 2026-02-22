@@ -112,12 +112,42 @@ with st.sidebar:
                 ("M", "P", "Synergy", "데이터", "공정 데이터 기반 ‘Energy Saving’ 고객 제안서 패키지", "주요 고객사 기술 미팅 준비", "고객 신뢰 상승, 차별화된 기술영업 강화", 5, 3),
                 ("P", "R", "Synergy", "데이터", "품질 이상 징후 조기탐지(공정+랩 데이터) 룰셋 공동 구축", "품질 이슈 발생 전 사전 감지", "불량/클레임 감소, 안정 생산", 4, 4),
                 ("R", "M", "Synergy", "커뮤니케이션", "연구소-마케팅 ‘월 1회 기술 브리핑’으로 스토리라인 합의", "분기별 제품/기술 로드맵 공유", "브랜드 메시지 일관성 확보", 4, 2),
-                ("S", "M", "Synergy", "툴/인프라", "협업 포털(문서/티켓/회의록) 단일화로 커뮤니케이션 비용 절감", "프로젝트 진행 중 자료가 분산될 때", "의사결정 속도 개선, 누락 감소", 3, 2),
+                ("S", "M", "Synergy", "툴/인프라", "협업 포털(문서/티켓/회의록) 단일화로 커뮤니케이션 비용 절감", "프로젝트 진행 중 자료가 분산될 때}", "의사결정 속도 개선, 누락 감소", 3, 2),
             ]
             for dept, target, cat, tag, summary, situation, impact, sev, eff in samples:
                 db.add_feedback(dept, target, cat, summary, tag=tag, situation=situation, impact=impact, severity=sev, effort=eff)
-            st.success("예시 데이터가 입력되었습니다.")
+            st.success("예시 보드 데이터가 입력되었습니다.")
             st.rerun()
+
+        if st.button("🧪 캔버스 예시 데이터 넣기"):
+            # Ensure some feedback exists to attach to
+            all_fb = db.get_all_feedback()
+            if not all_fb:
+                st.warning("먼저 '성능테스트용 예시 데이터 넣기'를 눌러 보드 데이터를 만든 후 실행해 주세요.")
+            else:
+                # attach to top 2 bottlenecks + top 2 synergies
+                bn = [f for f in all_fb if f[3] == "Bottleneck"]
+                syn = [f for f in all_fb if f[3] == "Synergy"]
+                picks = (sorted(bn, key=lambda x: x[10], reverse=True)[:2] + sorted(syn, key=lambda x: x[10], reverse=True)[:2])
+                for row in picks:
+                    fid, from_dept, to_dept, cat, tag, summary, situation, impact, sev, eff, likes, ts = row
+                    proposal = "\n".join([
+                        "- 협업 툴(Teams/Slack)에 ‘실시간 데이터 공유 보드’를 만들고 핵심 링크/지표를 고정",
+                        f"- {from_dept}-{to_dept} 정기 싱크(월 1회)로 용어/결정사항을 합의하고 회의록을 한 곳에 누적",
+                        "- 요청/응답은 티켓(접수→진행→완료)으로 상태를 공유해 누락을 줄이기",
+                    ])
+                    db.upsert_action_item(
+                        feedback_id=fid,
+                        author_id=author_id,
+                        category=cat,
+                        from_dept=from_dept,
+                        to_dept=to_dept,
+                        summary=summary,
+                        votes=likes,
+                        proposal=proposal,
+                    )
+                st.success("내 캔버스에 예시 데이터가 입력되었습니다.")
+                st.rerun()
 
 # Main Header
 st.title("🚀 SK Enmove: MPRS Synergy Sync 2026")
