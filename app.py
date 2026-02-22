@@ -227,12 +227,12 @@ def main():
             
             /* The track (background) of the toggle */
             div[data-testid="stCheckbox"] div[role="switch"] {
-                background-color: #64748b !important; /* darker slate gray for visibility */
-                border: 2px solid #334155 !important;
+                background-color: #1e293b !important; /* VERY dark slate-800 for contrast */
+                border: 2px solid #0f172a !important;
             }
-            /* The handle (circle) of the toggle */
+            /* The handle (circle) of the toggle when OFF */
             div[data-testid="stCheckbox"] div[role="switch"] > div {
-                background-color: #1e293b !important; /* very dark handle when off */
+                background-color: #ffffff !important; /* White handle so it pops against dark track */
             }
             /* When checked (ON) */
             div[data-testid="stCheckbox"] div[role="switch"][aria-checked="true"] {
