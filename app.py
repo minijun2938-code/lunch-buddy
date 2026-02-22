@@ -325,38 +325,40 @@ def main():
                 # Confirm dialog (prevents accidental cancel)
                 if st.button("🚫 점약 취소하기", type="primary"):
                     st.session_state["confirm_cancel_open"] = True
+                    st.session_state["confirm_cancel_shown_once"] = False
                     st.session_state["pause_refresh"] = True
 
+                # NOTE: st.dialog has an (X) close button; Streamlit doesn't give us an onClose.
+                # Workaround: if the dialog was already shown once and we rerun again without a choice,
+                # treat it as closed.
                 if st.session_state.get("confirm_cancel_open", False):
-                    # If user closes the dialog with the (X) button, Streamlit doesn't notify us.
-                    # So we also provide an always-visible close button outside the dialog.
-                    if st.button("✖️ 팝업 닫기", key="force_close_cancel_dialog"):
+                    if st.session_state.get("confirm_cancel_shown_once", False):
                         st.session_state["confirm_cancel_open"] = False
                         st.session_state["pause_refresh"] = False
-                        st.rerun()
+                    else:
+                        @st.dialog("정말 취소하시겠어요? (눈물)")
+                        def _confirm_cancel_dialog():
+                            st.write("지금 잡힌 약속/그룹이 취소돼요. 괜찮아요?")
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if st.button("예", type="primary", use_container_width=True, key="do_cancel_btn"):
+                                    ok, err = db.cancel_booking_for_user(user_id, meal=meal)
+                                    st.session_state["confirm_cancel_open"] = False
+                                    st.session_state["pause_refresh"] = False
+                                    if ok:
+                                        st.success("취소 완료")
+                                        st.session_state.pop("hosting_open", None)
+                                    else:
+                                        st.error(err or "취소 실패")
+                                    st.rerun()
+                            with c2:
+                                if st.button("아니오", use_container_width=True, key="cancel_dialog_no_btn"):
+                                    st.session_state["confirm_cancel_open"] = False
+                                    st.session_state["pause_refresh"] = False
+                                    st.rerun()
 
-                    @st.dialog("정말 취소하시겠어요? (눈물)")
-                    def _confirm_cancel_dialog():
-                        st.write("지금 잡힌 약속/그룹이 취소돼요. 괜찮아요?")
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            if st.button("네, 취소할게요", type="primary", use_container_width=True, key="do_cancel_btn"):
-                                ok, err = db.cancel_booking_for_user(user_id, meal=meal)
-                                st.session_state["confirm_cancel_open"] = False
-                                st.session_state["pause_refresh"] = False
-                                if ok:
-                                    st.success("취소 완료")
-                                    st.session_state.pop("hosting_open", None)
-                                else:
-                                    st.error(err or "취소 실패")
-                                st.rerun()
-                        with c2:
-                            if st.button("닫기(유지)", use_container_width=True, key="cancel_dialog_close_btn"):
-                                st.session_state["confirm_cancel_open"] = False
-                                st.session_state["pause_refresh"] = False
-                                st.rerun()
-
-                    _confirm_cancel_dialog()
+                        _confirm_cancel_dialog()
+                        st.session_state["confirm_cancel_shown_once"] = True
             else:
                 status_text = {
                     "Free": f"{('점심' if meal=='lunch' else '저녁')} 약속 없어요(불러주세요) 🟢",
