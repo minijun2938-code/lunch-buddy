@@ -460,18 +460,20 @@ def main():
         """
                             st.components.v1.html(chat_html, height=300)
 
-                        # Use text_input + send button (st.chat_input is fragile with autorefresh)
+                        # Use text_input + send button with callback (handles Enter + clearing)
                         msg_key = f"chat_msg_{host_uid}_{meal}"
-                        msg = st.text_input("메시지", key=msg_key, placeholder="메시지 입력…")
-                        send = st.button("전송", key=f"send_{host_uid}_{meal}")
-                        if send:
-                            ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), msg, today_str, meal=meal)
-                            if not ok:
-                                # Don't rerun on error; otherwise the error message disappears instantly.
-                                st.error(err or "전송 실패")
-                            else:
-                                st.session_state[msg_key] = ""
-                                st.rerun()
+
+                        def on_chat_submit():
+                            val = st.session_state.get(msg_key, "").strip()
+                            if val:
+                                ok, err = db.add_group_chat(host_uid, user_id, db.get_display_name(user_id), val, today_str, meal=meal)
+                                if ok:
+                                    st.session_state[msg_key] = ""
+                                else:
+                                    st.error(err or "전송 실패")
+
+                        st.text_input("메시지", key=msg_key, placeholder="메시지 입력…", on_change=on_chat_submit)
+                        st.button("전송", key=f"send_{host_uid}_{meal}", on_click=on_chat_submit)
                 else:
                     # 1:1 booked detail (no group) → auto-create a 1:1 group so details can be stored/shown
                     if my_status == "Booked":
