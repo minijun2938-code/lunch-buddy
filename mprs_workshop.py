@@ -410,69 +410,151 @@ if tab_canvas is not None:
 
 if tab_todo is not None:
     with tab_todo:
-        st.subheader("✅ 협업방안 생성 (To-do)")
-        st.caption("캔버스에 저장된 모든 논의 내용을 ‘실행 To-do’ 체크리스트로 변환합니다.")
+        st.subheader("✅ 협업방안 생성 (유사도 기반 종합 To-do)")
+        st.caption("모든 조의 캔버스 내용을 합쳐서 ‘유사한 제안’을 묶고, 중복을 제거한 종합 To-do 리스트를 만듭니다.")
 
         # 이 탭은 관리자 오픈용이므로 전체 캔버스를 기준으로 생성
         items = db.get_action_items()
         if not items:
             st.info("캔버스에 저장된 항목이 없어서 To-do를 만들 수 없습니다.")
         else:
-            # items: (feedback_id, author_id, category, from_dept, to_dept, summary, votes, proposal, created_at)
-            def _todo_md(items_rows):
-                bn = [r for r in items_rows if r[2] == "Bottleneck"]
-                syn = [r for r in items_rows if r[2] == "Synergy"]
+            import re
 
-                def todos_for(r):
-                    fid, _author, cat, f, t, summary, votes, proposal, created_at = r
-                    header = f"### [{votes}표] {f}→{t} / {('병목' if cat=='Bottleneck' else '시너지')}"
-                    lines = [header, f"- 원문(요약): {summary}"]
-                    lines.append("- To-do:")
+            sim_threshold = st.slider("유사도 묶기 기준(높을수록 더 엄격)", 0.2, 0.8, 0.35, 0.05)
 
-                    # proposal 문장을 줄 단위로 To-do화
-                    if proposal and proposal.strip():
-                        for ln in [x.strip(" -\t") for x in proposal.splitlines() if x.strip()]:
-                            lines.append(f"  - [ ] {ln}")
-                    else:
-                        lines.append("  - [ ] (캔버스 제안이 비어있음) 해결 방안을 캔버스에 작성")
+            def _tokens(s: str):
+                s = (s or "").lower()
+                s = re.sub(r"[^0-9a-z가-힣\s]", " ", s)
+                toks = [t.strip() for t in s.split() if len(t.strip()) >= 2]
+                stop = {
+                    "그리고",
+                    "그런데",
+                    "하지만",
+                    "때문",
+                    "업무",
+                    "부서",
+                    "협업",
+                    "회의",
+                    "진행",
+                    "공유",
+                    "데이터",
+                    "툴",
+                    "인프라",
+                    "프로세스",
+                    "의사결정",
+                    "권한",
+                    "가능",
+                    "필요",
+                }
+                return set([t for t in toks if t not in stop])
 
-                    return "\n".join(lines)
+            def _jaccard(a: set, b: set) -> float:
+                if not a and not b:
+                    return 0.0
+                inter = len(a & b)
+                union = len(a | b)
+                return inter / union if union else 0.0
 
+            # Build text for similarity: summary + proposal
+            docs = []
+            for r in items:
+                fid, author, cat, f, t, summary, votes, proposal, created_at = r
+                docs.append((r, _tokens(f"{summary} {proposal}")))
+
+            # Union-find clustering
+            parent = list(range(len(docs)))
+
+            def find(x):
+                while parent[x] != x:
+                    parent[x] = parent[parent[x]]
+                    x = parent[x]
+                return x
+
+            def union(a, b):
+                ra, rb = find(a), find(b)
+                if ra != rb:
+                    parent[rb] = ra
+
+            for i in range(len(docs)):
+                for j in range(i + 1, len(docs)):
+                    sim = _jaccard(docs[i][1], docs[j][1])
+                    if sim >= sim_threshold:
+                        union(i, j)
+
+            clusters = {}
+            for idx in range(len(docs)):
+                r = find(idx)
+                clusters.setdefault(r, []).append(idx)
+
+            # Build aggregated TODO list
+            def _lines_from_proposal(p: str):
+                out = []
+                for ln in (p or "").splitlines():
+                    ln = ln.strip().lstrip("-• ").strip()
+                    if ln:
+                        out.append(ln)
+                return out
+
+            def _cluster_title(rows):
+                # pick highest votes item summary as title
+                rows_sorted = sorted(rows, key=lambda rr: rr[6], reverse=True)
+                top = rows_sorted[0]
+                return f"{top[5]}"
+
+            def _cluster_todos(rows):
+                # combine & dedupe todo lines
+                seen = set()
+                todos = []
+                for rr in rows:
+                    for ln in _lines_from_proposal(rr[7]):
+                        key = re.sub(r"\s+", " ", ln.lower())
+                        if key not in seen:
+                            seen.add(key)
+                            todos.append(ln)
+                return todos
+
+            # sort clusters by total votes
+            cluster_rows = []
+            for _, idxs in clusters.items():
+                rows = [docs[i][0] for i in idxs]
+                total_votes = sum([r[6] for r in rows])
+                cluster_rows.append((total_votes, rows))
+            cluster_rows.sort(key=lambda x: x[0], reverse=True)
+
+            if st.button("✨ 종합 To-do 생성", use_container_width=True):
                 md = []
-                md.append("# SK Enmove MPRS Workshop - To-do List (Canvas 기반)")
+                md.append("# SK Enmove MPRS Workshop - 종합 To-do List (캔버스 통합)")
                 md.append("")
-                md.append(f"- 캔버스 항목: {len(items_rows)}개 (병목 {len(bn)} / 시너지 {len(syn)})")
+                md.append(f"- 전체 캔버스 항목: {len(items)}개")
+                md.append(f"- 유사도 기준(Jaccard): {sim_threshold}")
+                md.append(f"- 클러스터 수: {len(cluster_rows)}")
                 md.append("")
 
-                md.append("## 병목 To-do (득표순)")
-                if not bn:
-                    md.append("- (병목 항목 없음)")
-                else:
-                    for r in bn:
-                        md.append(todos_for(r))
-                        md.append("")
+                for n, (tv, rows) in enumerate(cluster_rows, 1):
+                    title = _cluster_title(rows)
+                    md.append(f"## {n}. (총 {tv}표) {title}")
+                    md.append("- 포함된 논의(요약):")
+                    for rr in sorted(rows, key=lambda x: x[6], reverse=True):
+                        fid, author, cat, f, t, summary, votes, proposal, created_at = rr
+                        md.append(f"  - [{votes}표] {f}→{t} / {('병목' if cat=='Bottleneck' else '시너지')} / {summary}")
 
-                md.append("## 시너지 To-do (득표순)")
-                if not syn:
-                    md.append("- (시너지 항목 없음)")
-                else:
-                    for r in syn:
-                        md.append(todos_for(r))
-                        md.append("")
+                    todos = _cluster_todos(rows)
+                    md.append("- To-do:")
+                    if todos:
+                        md += [f"  - [ ] {x}" for x in todos]
+                    else:
+                        md.append("  - [ ] (제안 내용이 비어있음) 캔버스에 해결 방안을 추가")
+                    md.append("")
 
-                return "\n".join(md)
-
-            if st.button("✨ To-do 생성", use_container_width=True):
-                todo = _todo_md(items)
-                st.session_state["canvas_todo"] = todo
+                st.session_state["canvas_todo"] = "\n".join(md)
 
             todo = st.session_state.get("canvas_todo")
             if todo:
                 st.markdown(todo)
                 st.download_button(
-                    "📥 To-do 다운로드 (Markdown)",
+                    "📥 종합 To-do 다운로드 (Markdown)",
                     data=todo.encode("utf-8"),
-                    file_name="mprs_todo.md",
+                    file_name="mprs_todo_clustered.md",
                     mime="text/markdown",
                     use_container_width=True,
                 )
