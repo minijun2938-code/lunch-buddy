@@ -769,19 +769,36 @@ def main():
                 # Autofill current members: me + (if 1:1 booked) partner(s)
                 partners = db.get_accepted_partners_today(user_id, meal=meal)
                 default_members = ", ".join([current_user] + [name for _uid, name in partners])
+                
+                # Load existing group data for editing
+                existing_group = db.get_group_by_host_today(user_id, meal=meal)
+                default_seats = 1
+                default_menu = ""
+                default_payer = ""
+                default_kind_idx = 0
+                
+                if existing_group:
+                    # g.id, g.date, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name, g.kind
+                    _, _, _, _, g_members, g_seats, g_menu, g_payer, g_kind = existing_group
+                    default_members = g_members or default_members
+                    default_seats = int(g_seats or 1)
+                    default_menu = g_menu or ""
+                    default_payer = g_payer or ""
+                    if meal == "dinner":
+                        default_kind_idx = 1 if g_kind == "drink" else 0
 
                 with st.form("hosting_form"):
                     member_names = st.text_input("현재 멤버(이름)", value=default_members, key=f"host_members_{user_id}")
-                    seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=1, step=1, key=f"host_seats_{user_id}")
+                    seats_left = st.number_input("남은 자리", min_value=0, max_value=20, value=default_seats, step=1, key=f"host_seats_{user_id}")
 
                     if meal == "dinner":
-                        dinner_kind = st.selectbox("저녁 타입", ["밥만", "술"], index=0, key="dinner_kind_host")
+                        dinner_kind = st.selectbox("저녁 타입", ["밥만", "술"], index=default_kind_idx, key="dinner_kind_host")
                         st.caption("(저녁은 '밥만' / '술'로 구분됩니다)")
 
-                    menu = st.text_input("메뉴", key=f"host_menu_{user_id}")
+                    menu = st.text_input("메뉴", value=default_menu, key=f"host_menu_{user_id}")
 
                     st.caption("(선택) 내가쏜다!")
-                    payer_name = st.text_input("누가 쏘나요? (이름 입력)", value="", key=f"host_payer_{user_id}")
+                    payer_name = st.text_input("누가 쏘나요? (이름 입력)", value=default_payer, key=f"host_payer_{user_id}")
                     payer_name = (payer_name or "").strip()
                     if not payer_name:
                         payer_name = None
