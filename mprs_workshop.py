@@ -42,7 +42,7 @@ with st.sidebar:
     dept_choice = st.selectbox("당신의 부문(Icon)을 선택하세요", ["M (Marketing)", "P (Production)", "R (R&D)", "S (Staff)"])
     st.divider()
     
-    st.write(f"보드 투표: {len(st.session_state['voted_items'])} / 1")
+    st.write(f"보드 투표: {len(st.session_state['voted_items'])} (카드당 1표)")
     st.write(f"AI 제안 투표: {len(st.session_state['voted_ai'])} / 1")
     
     admin_code = st.text_input("Admin Code", type="password")
@@ -109,9 +109,37 @@ with tab_board:
                 dept_feedback = [f for f in all_data if f[2] == d_key]
                 for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in dept_feedback:
                     color_class = f"{source.lower()}-color"
-                    st.markdown(f"""<div class="status-card {color_class}"><div class="vote-count">👍 {likes}</div><div class="from-label">From {source}</div><strong>{'📉' if cat=='Bottleneck' else '🌟'} {content}</strong><br/><div class="tag-label">#{tag}</div></div>""", unsafe_allow_html=True)
-                    if st.button(f"👍 투표", key=f"v_{fid}", disabled=(fid in st.session_state["voted_items"] or len(st.session_state["voted_items"]) >= 1)):
-                        db.add_vote(fid); st.session_state["voted_items"].add(fid); st.rerun()
+
+                    # 카드 요약(한눈에)
+                    st.markdown(
+                        f"""<div class="status-card {color_class}">
+                        <div class="vote-count">👍 {likes}</div>
+                        <div class="from-label">From {source}  →  To {target} · {cat}</div>
+                        <strong>{'📉' if cat=='Bottleneck' else '🌟'} {content}</strong><br/>
+                        <div class="tag-label">#{tag}</div>
+                        <div class="tag-label">Impact:{sev}</div>
+                        <div class="tag-label">Effort:{eff}</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+
+                    # 상세(전부 보이게)
+                    with st.expander("상세 보기"):
+                        if sit:
+                            st.markdown(f"**상황**: {sit}")
+                        if imp:
+                            st.markdown(f"**영향/효과**: {imp}")
+                        st.caption(f"작성: {ts}")
+
+                    # 카드당 1표(= 같은 카드에는 1번만 투표 가능)
+                    if st.button(
+                        "👍 이 카드에 투표",
+                        key=f"v_{fid}",
+                        disabled=(fid in st.session_state["voted_items"]),
+                    ):
+                        db.add_vote(fid)
+                        st.session_state["voted_items"].add(fid)
+                        st.rerun()
 
 with tab_matrix:
     st.subheader("Impact vs Effort 분석")
