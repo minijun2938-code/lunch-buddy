@@ -73,11 +73,17 @@ def main():
         st.success("전체 DB 초기화 완료 (가입/히스토리 모두 삭제)")
         st.stop()
 
-    # --- Meal state (toggle will live in sidebar just under login area) ---
+    # --- Meal state initialization ---
+    # We use the toggle value directly if it exists in session_state to avoid lag.
+    if "meal_toggle" in st.session_state:
+        st.session_state["meal"] = "dinner" if st.session_state["meal_toggle"] else "lunch"
+    
     if "meal" not in st.session_state:
         st.session_state["meal"] = "lunch"
 
-    meal_label = "점심" if st.session_state["meal"] == "lunch" else "저녁"
+    meal = st.session_state["meal"]
+    meal_label = "점심" if meal == "lunch" else "저녁"
+
     st.title("[Enmover Meal Finder, EMF]")
     st.markdown(f"### 오늘 {meal_label} 드실분 ? ({today_kor})")
     st.caption(f"오늘 날짜: {today_str}")
@@ -201,9 +207,8 @@ def main():
         st.header("🔐 회원가입 / 로그인")
 
         # Meal toggle: place it right under login section, above profile
-        dinner_on = st.toggle("🌙 저녁 모드", value=(st.session_state["meal"] == "dinner"), key="meal_toggle")
-        st.session_state["meal"] = "dinner" if dinner_on else "lunch"
-        meal = st.session_state["meal"]
+        st.toggle("🌙 저녁 모드", value=(st.session_state["meal"] == "dinner"), key="meal_toggle")
+        # (State is updated at the top of main() on the next rerun triggered by this toggle)
 
         if "user" in st.session_state:
             u = st.session_state["user"]
