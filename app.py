@@ -155,6 +155,40 @@ def main():
             """,
             unsafe_allow_html=True,
         )
+    else:
+        # Lunch mode: force Light UI (even if OS is in dark mode)
+        st.markdown(
+            """
+            <style>
+            /* ---- Lunch Light Mode (CSS override) ---- */
+            :root{color-scheme:light;}
+            
+            /* Backgrounds */
+            [data-testid="stAppViewContainer"]{background:#ffffff !important; color:#31333F !important;}
+            [data-testid="stSidebar"]{background:#f0f2f6 !important;}
+            
+            /* Text colors */
+            [data-testid="stMarkdownContainer"] *, p, li, span, label, div{
+                color:#31333F !important;
+            }
+            h1,h2,h3,h4,h5,h6{color:#1f2937 !important;}
+            
+            /* alerts (reset to default light) */
+            [data-testid="stAlert"]{
+              background:#f0f2f6 !important;
+              border:1px solid rgba(49,51,63,0.1) !important;
+            }
+            [data-testid="stAlert"] *{color:#31333F !important;}
+            
+            /* Metric text */
+            [data-testid="stMetricValue"]{color:#31333F !important;}
+            
+            /* Expander */
+            [data-testid="stExpander"] details{background:#ffffff !important;}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # tighter separator (default --- is too tall)
     st.markdown("<hr style='margin:0.35rem 0 0.6rem 0; border:0; border-top:1px solid rgba(128,128,128,0.35);'>", unsafe_allow_html=True)
@@ -189,30 +223,34 @@ def main():
                 st.success("✅ 알림 연동됨")
             else:
                 st.warning("❌ 알림 미연동 (초대를 놓칠 수 있어요)")
+                
+                bot_username = bot.get_bot_username()
+                emp_id = u.get("employee_id")
+                
+                if bot_username and emp_id:
+                    st.link_button(
+                        "텔레그램 연동하기(봇 열기)",
+                        f"https://t.me/{bot_username}?start={emp_id}",
+                        use_container_width=True,
+                    )
+                    st.caption("버튼 클릭 → 텔레그램에서 '시작(Start)'만 누르면 됩니다")
 
-            bot_username = bot.get_bot_username()
-            emp_id = u.get("employee_id")
-            if bot_username and emp_id:
-                st.link_button(
-                    "텔레그램 연동하기(봇 열기)",
-                    f"https://t.me/{bot_username}?start={emp_id}",
-                    use_container_width=True,
-                )
-                st.caption("버튼 클릭 → 텔레그램에서 '시작(Start)'만 누르면 됩니다")
-
-                if st.button("연동 확인", use_container_width=True):
-                    ok2, err2, chat_id = bot.try_register_chat_id_for_employee(emp_id)
-                    if not ok2:
-                        st.error(err2 or "연동 확인 실패")
-                    else:
-                        ok3, err3 = db.update_user_chat_id_by_employee_id(emp_id, chat_id)
-                        if ok3:
-                            st.success("연동 완료! 이제 초대/수락 알림이 텔레그램으로 와요.")
-                            st.rerun()
+                    if st.button("연동 확인", use_container_width=True):
+                        ok2, err2, chat_id = bot.try_register_chat_id_for_employee(emp_id)
+                        if not ok2:
+                            st.error(err2 or "연동 확인 실패")
                         else:
-                            st.error(err3 or "DB 저장 실패")
-            else:
-                st.caption("(관리자) TELEGRAM_BOT_USERNAME / TELEGRAM_BOT_TOKEN 설정이 필요합니다")
+                            ok3, err3 = db.update_user_chat_id_by_employee_id(emp_id, chat_id)
+                            if ok3:
+                                st.success("연동 완료! 이제 초대/수락 알림이 텔레그램으로 와요.")
+                                st.rerun()
+                            else:
+                                st.error(err3 or "DB 저장 실패")
+                else:
+                    if not bot_username:
+                        st.error("⚠️ 텔레그램 봇 아이디(USERNAME)가 설정되지 않았습니다. (Streamlit Secrets 확인 필요)")
+                    if not emp_id:
+                        st.error("⚠️ 사용자 사번 정보가 없습니다.")
 
             st.markdown("---")
             st.subheader("👤 내 프로필")
