@@ -203,7 +203,7 @@ with tab_speak:
             syn_target = ft2.selectbox("To", ["M", "P", "R", "S"], key="syn_to")
             syn_tag = st.selectbox("분류", TAGS, key="syn_tag")
             syn_content = st.text_input("아이디어 (한 줄 요약)")
-            syn_situation = st.text_area("기대 상황")
+            syn_situation = st.text_area("구체적 상황 (언제/어디서?)")
             syn_impact = st.text_area("기대 효과")
             sc1, sc2 = st.columns(2)
             syn_sev = sc1.slider("기대 효과 (1-5)", 1, 5, 4)
