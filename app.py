@@ -538,7 +538,7 @@ def main():
                         st.session_state["confirm_cancel_shown_once"] = True
             else:
                 status_text = {
-                    "Free": f"{('점심' if meal=='lunch' else '저녁')} 약속 없어요(불러주세요) 🙇‍♂️",
+                    "Free": (f"{('점심' if meal=='lunch' else '저녁')} 약속 없어요(불러주세요) 🙇‍♂️" if meal=="lunch" else f"저녁 {('술' if my_kind=='drink' else '밥')} 가능해요!"),
                     "Hosting": f"오늘 {('점심' if meal=='lunch' else '저녁')} 같이 하실분? 모집중 🧑‍🍳",
                     "Planning": f"{('점심' if meal=='lunch' else '저녁')} 약속 잡는 중 🟠",
                     "Skip": "오늘은 넘어갈게요 (미참여) 🙅",
