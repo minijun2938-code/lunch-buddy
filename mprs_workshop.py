@@ -2,12 +2,25 @@ import streamlit as st
 import mprs_db as db
 import os
 import pandas as pd
+import uuid
+from streamlit_cookies_manager import EncryptedCookieManager
 
 # Page Config
 st.set_page_config(page_title="SK Enmove MPRS Synergy Sync 2026", layout="wide", page_icon="🤝")
 
 # Initialize DB
 db.init_db()
+
+# Identify current user (cookie-based) so canvas entries are private per writer
+cookies = EncryptedCookieManager(prefix="mprs_", password=os.environ.get("COOKIE_PASSWORD", "mprs-workshop"))
+if not cookies.ready():
+    st.stop()
+
+author_id = cookies.get("uid")
+if not author_id:
+    author_id = str(uuid.uuid4())
+    cookies["uid"] = author_id
+    cookies.save()
 
 # Session State for Voting
 if "voted_items" not in st.session_state:
@@ -319,6 +332,7 @@ if tab_canvas is not None:
                         if saved:
                             db.upsert_action_item(
                                 feedback_id=fid,
+                                author_id=author_id,
                                 category=cat,
                                 from_dept=from_dept,
                                 to_dept=to_dept,
@@ -331,13 +345,13 @@ if tab_canvas is not None:
                             st.rerun()
 
             st.markdown("---")
-            st.markdown("### 📌 저장된 캔버스 목록")
-            items = db.get_action_items()
+            st.markdown("### 📌 저장된 캔버스 목록 (내가 작성한 것만)")
+            items = db.get_action_items(author_id=author_id)
             if not items:
                 st.caption("아직 저장된 캔버스가 없습니다.")
             else:
                 md_lines = ["# MPRS Workshop Action Canvas", ""]
-                for (fid, cat, f, t, summary, votes, proposal, created_at) in items:
+                for (fid, _author, cat, f, t, summary, votes, proposal, created_at) in items:
                     st.markdown(f"**[{votes}표] {f}→{t} / {cat}**  ")
                     st.write(f"- {summary}")
                     if proposal:
@@ -366,17 +380,18 @@ if tab_todo is not None:
         st.subheader("✅ 협업방안 생성 (To-do)")
         st.caption("캔버스에 저장된 모든 논의 내용을 ‘실행 To-do’ 체크리스트로 변환합니다.")
 
+        # 이 탭은 관리자 오픈용이므로 전체 캔버스를 기준으로 생성
         items = db.get_action_items()
         if not items:
             st.info("캔버스에 저장된 항목이 없어서 To-do를 만들 수 없습니다.")
         else:
-            # items: (feedback_id, category, from_dept, to_dept, summary, votes, proposal, created_at)
+            # items: (feedback_id, author_id, category, from_dept, to_dept, summary, votes, proposal, created_at)
             def _todo_md(items_rows):
-                bn = [r for r in items_rows if r[1] == "Bottleneck"]
-                syn = [r for r in items_rows if r[1] == "Synergy"]
+                bn = [r for r in items_rows if r[2] == "Bottleneck"]
+                syn = [r for r in items_rows if r[2] == "Synergy"]
 
                 def todos_for(r):
-                    fid, cat, f, t, summary, votes, proposal, created_at = r
+                    fid, _author, cat, f, t, summary, votes, proposal, created_at = r
                     header = f"### [{votes}표] {f}→{t} / {('병목' if cat=='Bottleneck' else '시너지')}"
                     lines = [header, f"- 원문(요약): {summary}"]
                     lines.append("- To-do:")
