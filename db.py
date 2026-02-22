@@ -1491,7 +1491,7 @@ def add_group_chat(host_user_id: int, user_id: int, username: str, message: str,
         c = conn.cursor()
         try:
             c.execute(
-                "INSERT INTO group_chat(date, meal, host_user_id, user_id, username, message, timestamp) VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO group_chat(date, meal, host_user_id, user_id, username, message, timestamp) VALUES (?,?,?,?,?,?,?)",
                 (date_str, meal, host_user_id, user_id, username, message, kst_now_str()),
             )
         except sqlite3.OperationalError as e:
