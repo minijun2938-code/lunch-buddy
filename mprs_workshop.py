@@ -136,37 +136,60 @@ with tab_board:
             with cols[i]:
                 st.markdown(f"### {d_key} ({DEPT_MAP[d_key]})")
                 dept_feedback = [f for f in all_data if f[2] == d_key]
-                for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in dept_feedback:
-                    color_class = f"{source.lower()}-color"
 
-                    # 카드 요약(한눈에) - 카테고리(병목/시너지) 배경색으로 즉시 구분
-                    cat_class = "bottleneck-card" if cat == "Bottleneck" else "synergy-card"
+                bottlenecks = [f for f in dept_feedback if f[3] == "Bottleneck"]
+                synergies = [f for f in dept_feedback if f[3] == "Synergy"]
+
+                # 위: 병목 / 아래: 시너지
+                st.markdown(f"#### 📉 병목 ({len(bottlenecks)})")
+                for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in bottlenecks:
+                    color_class = f"{source.lower()}-color"
+                    cat_class = "bottleneck-card"
                     st.markdown(
                         f"""<div class="status-card {color_class} {cat_class}">
                         <div class="vote-count">👍 {likes}</div>
                         <div class="from-label">From {source}  →  To {target} · {cat}</div>
-                        <strong>{'📉' if cat=='Bottleneck' else '🌟'} {content}</strong><br/>
+                        <strong>📉 {content}</strong><br/>
                         <div class="tag-label">#{tag}</div>
                         <div class="tag-label">Impact:{sev}</div>
                         <div class="tag-label">Effort:{eff}</div>
                         </div>""",
                         unsafe_allow_html=True,
                     )
-
-                    # 상세(전부 보이게)
-                    with st.expander("상세 보기"):
+                    with st.expander("상세 보기", expanded=False):
                         if sit:
                             st.markdown(f"**상황**: {sit}")
                         if imp:
                             st.markdown(f"**영향/효과**: {imp}")
                         st.caption(f"작성: {ts}")
+                    if st.button("👍 이 카드에 투표", key=f"v_{fid}", disabled=(fid in st.session_state["voted_items"])):
+                        db.add_vote(fid)
+                        st.session_state["voted_items"].add(fid)
+                        st.rerun()
 
-                    # 카드당 1표(= 같은 카드에는 1번만 투표 가능)
-                    if st.button(
-                        "👍 이 카드에 투표",
-                        key=f"v_{fid}",
-                        disabled=(fid in st.session_state["voted_items"]),
-                    ):
+                st.markdown("---")
+                st.markdown(f"#### 🌟 시너지 ({len(synergies)})")
+                for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in synergies:
+                    color_class = f"{source.lower()}-color"
+                    cat_class = "synergy-card"
+                    st.markdown(
+                        f"""<div class="status-card {color_class} {cat_class}">
+                        <div class="vote-count">👍 {likes}</div>
+                        <div class="from-label">From {source}  →  To {target} · {cat}</div>
+                        <strong>🌟 {content}</strong><br/>
+                        <div class="tag-label">#{tag}</div>
+                        <div class="tag-label">Impact:{sev}</div>
+                        <div class="tag-label">Effort:{eff}</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                    with st.expander("상세 보기", expanded=False):
+                        if sit:
+                            st.markdown(f"**상황**: {sit}")
+                        if imp:
+                            st.markdown(f"**영향/효과**: {imp}")
+                        st.caption(f"작성: {ts}")
+                    if st.button("👍 이 카드에 투표", key=f"v_{fid}", disabled=(fid in st.session_state["voted_items"])):
                         db.add_vote(fid)
                         st.session_state["voted_items"].add(fid)
                         st.rerun()
