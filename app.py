@@ -217,6 +217,16 @@ def main():
             /* Containers/borders */
             div[data-testid="stVerticalBlockBorderWrapper"]{border-color:rgba(17,24,39,0.12) !important;}
 
+            /* Toggle: Streamlit toggles can be hard to see in forced light mode */
+            [data-testid="stWidgetLabel"] p { color: #111827 !important; font-weight: 500 !important; }
+            div[data-testid="stCheckbox"] div[role="switch"] {
+                background-color: rgba(0, 0, 0, 0.1) !important;
+                border: 1px solid rgba(0, 0, 0, 0.2) !important;
+            }
+            div[data-testid="stCheckbox"] div[role="switch"][aria-checked="true"] {
+                background-color: #007bff !important;
+            }
+
             /* Metric text */
             [data-testid="stMetricValue"], [data-testid="stMetricDelta"]{color:#111827 !important;}
 
