@@ -809,7 +809,7 @@ def main():
                 st.caption("⚠️ 이미 약속이 있는 것 같아요! (오늘은 변경/요청이 제한돼요)")
 
             role = st.session_state["user"].get("role")
-            is_lunch = (meal == "lunch")
+            is_lunch = ("lunch" in meal)
 
             # Sender lock: if I have a pending outgoing invite, I shouldn't set myself to Free.
             base_free_disabled = db.get_status_today(user_id, meal=meal) in ("Booked", "Planning")
@@ -1078,7 +1078,7 @@ def main():
             st.markdown("---")
     with tab_board:
             # --- Dashboard ---
-            is_lunch = (meal == "lunch")
+            is_lunch = ("lunch" in meal)
             meal_label = "점심" if is_lunch else "저녁"
 
             if expired:
