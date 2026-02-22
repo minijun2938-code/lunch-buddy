@@ -105,24 +105,97 @@ with tab_board:
                         """, unsafe_allow_html=True)
 
 with tab_ai:
-    st.subheader("AI가 제안하는 2026 MPRS 협업 로드맵")
-    st.write("지금까지 수집된 모든 목소리를 기반으로 올해의 핵심 전략을 도출합니다.")
-    
-    if st.button("✨ 전략 리포트 생성 (Gemini)", use_container_width=True):
+    st.subheader("전략 리포트 (실시간 보드 기반)")
+    st.write("실시간 보드에 쌓인 내용을 요약/정리해서 워크샵 장표에 바로 붙일 수 있는 형태로 뽑습니다.")
+
+    if st.button("✨ 전략 리포트 생성", use_container_width=True):
         raw_feedback = db.get_all_feedback()
         if not raw_feedback:
-            st.warning("분석할 데이터가 부족합니다.")
+            st.warning("분석할 데이터가 부족합니다. 먼저 의견을 몇 개 등록해 주세요.")
         else:
-            with st.spinner("MPRS의 목소리를 분석하여 최적의 시너지를 설계 중..."):
-                # Real logic or more structured report
-                st.markdown("### 📋 2026 MPRS 협업 선언문 (Draft)")
-                st.info("💡 분석 결과: 부서 간 '언어의 장벽'이 가장 큰 병목으로 확인되었습니다. R&D의 기술 언어를 Marketing이 대중 언어로 변환하는 프로세스 표준화가 시급합니다.")
-                
-                st.markdown("""
-                #### 🛠️ 부문별 핵심 액션 아이템
-                1. **Marketing**: R&D 실무자와 주간 '커피 챗'을 통해 최신 기술 트렌드 미리 파악.
-                2. **Production**: Staff 부서의 인프라 지원 요청을 주 1회 정기 검토.
-                3. **R&D**: 비개발 부서를 위한 '1줄 기술 요약' 공유 채널 운영.
-                4. **Staff**: 현장의 리소스 부족 및 행정 병목을 데이터화하여 Production팀에 공유.
-                """)
-                st.balloons()
+            with st.spinner("실시간 보드 데이터를 분석 중..."):
+                from collections import Counter, defaultdict
+                import re
+
+                # raw_feedback rows: (dept, target_dept, category, content, created_at)
+                by_target_cat = Counter()
+                by_from_to = Counter()
+                quotes_by_target_cat = defaultdict(list)
+
+                def _keywords(txt: str):
+                    txt = (txt or "")
+                    txt = re.sub(r"[^0-9A-Za-z가-힣\s]", " ", txt)
+                    tokens = [t.strip() for t in txt.split() if len(t.strip()) >= 2]
+                    stop = {"그리고","그래서","하지만","때문","이것","저것","그냥","정말","너무","같아요","합니다","있어요","없어요","가능","불가","부서","업무","요청"}
+                    return [t for t in tokens if t not in stop]
+
+                kw_counter = Counter()
+
+                for from_dept, target_dept, cat, content, ts in raw_feedback:
+                    by_target_cat[(target_dept, cat)] += 1
+                    by_from_to[(from_dept, target_dept, cat)] += 1
+                    if len(quotes_by_target_cat[(target_dept, cat)]) < 5:
+                        quotes_by_target_cat[(target_dept, cat)].append(content)
+                    kw_counter.update(_keywords(content))
+
+                # 1) Overview
+                st.markdown("### 1) 한눈에 보는 요약")
+                total = len(raw_feedback)
+                st.write(f"- 총 의견 수: **{total}건**")
+
+                # 2) Heatmap-like table (From -> To)
+                st.markdown("### 2) From → To 흐름 (병목/시너지)")
+                matrix_rows = []
+                for f in ["M","P","R","S"]:
+                    row = {"From": f}
+                    for t in ["M","P","R","S"]:
+                        row[t] = int(by_from_to[(f,t,"Bottleneck")] + by_from_to[(f,t,"Synergy")])
+                    matrix_rows.append(row)
+                st.dataframe(matrix_rows, use_container_width=True, hide_index=True)
+
+                # 3) Top bottlenecks per target
+                st.markdown("### 3) Target 부서별 병목 TOP")
+                for t in ["M","P","R","S"]:
+                    cnt = by_target_cat[(t, "Bottleneck")]
+                    st.markdown(f"**- {t} (받은 병목): {cnt}건**")
+                    qs = quotes_by_target_cat.get((t, "Bottleneck"), [])
+                    if not qs:
+                        st.caption("(등록된 병목이 없습니다)")
+                    else:
+                        for q in qs[:3]:
+                            st.write(f"• {q}")
+
+                # 4) Top synergy ideas per target
+                st.markdown("### 4) Target 부서별 시너지 아이디어 TOP")
+                for t in ["M","P","R","S"]:
+                    cnt = by_target_cat[(t, "Synergy")]
+                    st.markdown(f"**- {t} (받은 시너지): {cnt}건**")
+                    qs = quotes_by_target_cat.get((t, "Synergy"), [])
+                    if not qs:
+                        st.caption("(등록된 시너지가 없습니다)")
+                    else:
+                        for q in qs[:3]:
+                            st.write(f"• {q}")
+
+                # 5) Keyword hints
+                st.markdown("### 5) 반복 키워드(힌트)")
+                top_kw = kw_counter.most_common(15)
+                if top_kw:
+                    st.write(", ".join([f"{k}({v})" for k,v in top_kw]))
+                else:
+                    st.caption("(키워드가 충분하지 않습니다)")
+
+                # 6) Action plan template
+                st.markdown("### 6) 워크샵 결과물 템플릿(바로 복사) ")
+                st.code(
+                    "\n".join([
+                        "[2026 MPRS 협업 액션 아이템]",
+                        "- TOP 병목 1: (From ? → To ?) / 문제: ______ / Owner: ___ / 기한: ___ / DoD: ___",
+                        "- TOP 병목 2: ...",
+                        "- TOP 시너지 1: (From ? → To ?) / 아이디어: ______ / Owner: ___ / 기한: ___ / DoD: ___",
+                        "- TOP 시너지 2: ...",
+                    ]),
+                    language="text",
+                )
+
+                st.success("실시간 보드 기반 리포트 생성 완료")
