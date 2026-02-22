@@ -120,7 +120,7 @@ def main():
 
             /* buttons */
             button[kind="primary"], button[kind="secondary"], .stButton button{
-              color:#0b1220 !important;
+              color:#000000 !important; /* requested: black text */
               background:#e5e7eb !important;
               border-color:rgba(255,255,255,0.25) !important;
             }
