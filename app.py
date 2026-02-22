@@ -526,20 +526,40 @@ def main():
         st.metric("매칭 그룹 수", len(rows))
         st.metric("총 참여 인원(중복 포함)", total_people)
 
-        # Detail table
+        # Table view
+        table_rows = []
         for d, m, host_uid, member_ids, member_count, kind, updated_at in rows:
-            with st.container(border=True):
-                st.write(f"**{d} | {m} | 멤버 {member_count}명**")
-                st.caption(f"업데이트: {updated_at}")
-                st.write("호스트: " + db.get_display_name(int(host_uid)))
-                try:
-                    ids = [int(x) for x in (member_ids or "").split(",") if x.strip()]
-                except Exception:
-                    ids = []
-                if ids:
-                    st.write("멤버: " + ", ".join([db.get_display_name(i) for i in ids]))
-                if kind:
-                    st.caption("타입: " + ("🍻 술" if kind == "drink" else "🍚 밥"))
+            try:
+                ids = [int(x) for x in (member_ids or "").split(",") if x.strip()]
+            except Exception:
+                ids = []
+            host_name = db.get_display_name(int(host_uid))
+            member_names = ", ".join([db.get_display_name(i) for i in ids]) if ids else ""
+            table_rows.append(
+                {
+                    "date": d,
+                    "meal": m,
+                    "kind": ("drink" if kind == "drink" else ("meal" if kind == "meal" else "")),
+                    "host": host_name,
+                    "members": member_names,
+                    "member_count": int(member_count or 0),
+                    "updated_at": updated_at,
+                }
+            )
+
+        st.subheader("📋 매칭 상세 테이블")
+        st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+        # Detail cards (optional)
+        with st.expander("카드 뷰(선택)", expanded=False):
+            for r in table_rows:
+                with st.container(border=True):
+                    st.write(f"**{r['date']} | {r['meal']} | 멤버 {r['member_count']}명**")
+                    st.caption(f"업데이트: {r['updated_at']}")
+                    st.write("호스트: " + r["host"])
+                    st.write("멤버: " + (r["members"] or "-"))
+                    if r["kind"]:
+                        st.caption("타입: " + ("🍻 술" if r["kind"] == "drink" else "🍚 밥"))
 
         st.stop()
 
