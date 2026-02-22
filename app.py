@@ -126,6 +126,16 @@ def main():
             }
             .stButton button:hover{filter:brightness(0.92);}
 
+            /* alerts (st.info/st.success/st.warning/st.error) */
+            [data-testid="stAlert"]{
+              background:rgba(255,255,255,0.06) !important;
+              border:1px solid rgba(255,255,255,0.14) !important;
+            }
+            [data-testid="stAlert"] *{color:#e5e7eb !important;}
+
+            /* expander/header blocks sometimes use light bg */
+            [data-testid="stExpander"] details{background:rgba(255,255,255,0.04) !important;}
+
             /* metric widget text */
             [data-testid="stMetricValue"], [data-testid="stMetricDelta"]{color:#f9fafb !important;}
             </style>
