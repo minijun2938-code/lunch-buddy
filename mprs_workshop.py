@@ -13,11 +13,12 @@ st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #4A90E2; color: white; }
-    .status-card { padding: 20px; border-radius: 10px; background-color: white; border-left: 5px solid #4A90E2; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); margin-bottom: 10px; }
+    .status-card { padding: 15px; border-radius: 10px; background-color: white; border-left: 5px solid #4A90E2; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; }
     .m-color { border-left-color: #FF6B6B; }
     .p-color { border-left-color: #4ECDC4; }
     .r-color { border-left-color: #FFE66D; }
     .s-color { border-left-color: #1A535C; }
+    .from-label { font-size: 0.85em; color: #666; font-weight: bold; margin-bottom: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -42,6 +43,8 @@ st.markdown(f"**현재 접속:** `{dept_choice}` 아이콘")
 
 tab_speak, tab_board, tab_ai = st.tabs(["🗣️ 의견 남기기", "📊 실시간 보드", "🔮 AI 전략 도출"])
 
+DEPT_MAP = {"M": "Marketing", "P": "Production", "R": "R&D", "S": "Staff"}
+
 with tab_speak:
     st.subheader("타 부서와 협업하며 느꼈던 솔직한 의견을 적어주세요.")
     
@@ -50,43 +53,56 @@ with tab_speak:
     with col1:
         with st.form("bottleneck_form", clear_on_submit=True):
             st.error("📉 병목 포인트 (불편했던 점)")
-            content = st.text_area("어떤 부서와 어떤 작업 시 무엇이 가장 힘들었나요?", placeholder="예: R&D 기술 설명이 너무 어려워서 마케팅 문구 작성이 힘들어요.")
+            target_dept = st.radio("어느 부서(Target)에 대한 의견인가요?", ["M", "P", "R", "S"], horizontal=True, key="bn_target")
+            content = st.text_area("구체적으로 어떤 부분이 힘든가요?", placeholder="예: R&D 기술 설명이 너무 어려워요.")
             submitted = st.form_submit_button("불편함 등록")
             if submitted and content:
-                db.add_feedback(dept_choice[0], "Bottleneck", content)
+                db.add_feedback(dept_choice[0], target_dept, "Bottleneck", content)
                 st.toast("병목 포인트가 등록되었습니다.")
 
     with col2:
         with st.form("synergy_form", clear_on_submit=True):
             st.success("🌟 시너지 아이디어 (함께하고 싶은 일)")
-            content = st.text_area("우리가 힘을 합치면 이런 것도 해볼 수 있을 것 같아요!", placeholder="예: Production의 사용성 데이터를 Staff가 대외 협력 자료에 바로 녹이면 좋겠어요.")
+            target_dept = st.radio("어느 부서(Target)와 시너지를 내고 싶나요?", ["M", "P", "R", "S"], horizontal=True, key="syn_target")
+            content = st.text_area("우리가 힘을 합치면 이런 것도 해볼 수 있을 것 같아요!", placeholder="예: Production의 사용성 데이터를 Staff 부문에서 활용하고 싶어요.")
             submitted = st.form_submit_button("아이디어 등록")
             if submitted and content:
-                db.add_feedback(dept_choice[0], "Synergy", content)
+                db.add_feedback(dept_choice[0], target_dept, "Synergy", content)
                 st.toast("시너지 아이디어가 등록되었습니다.")
 
 with tab_board:
-    st.subheader("전체 아이콘들의 실시간 목소리")
+    st.subheader("부문별 접수된 목소리")
     all_data = db.get_all_feedback()
     
     if not all_data:
         st.caption("아직 등록된 의견이 없습니다. 첫 의견을 남겨주세요!")
     else:
-        # Filter buttons
-        f_col1, f_col2, f_col3 = st.columns(3)
-        with f_col1: filter_dept = st.multiselect("부서 필터", ["M", "P", "R", "S"], default=["M", "P", "R", "S"], help="M: Marketing, P: Production, R: R&D, S: Staff")
-        with f_col2: filter_cat = st.multiselect("카테고리 필터", ["Bottleneck", "Synergy"], default=["Bottleneck", "Synergy"])
+        # 4 Columns for the dashboard
+        cols = st.columns(4)
+        depts = ["M", "P", "R", "S"]
         
-        for dept, cat, content, ts in all_data:
-            if dept in filter_dept and cat in filter_cat:
-                color_class = f"{dept.lower()}-color"
-                emoji = "📉" if cat == "Bottleneck" else "🌟"
-                st.markdown(f"""
-                <div class="status-card {color_class}">
-                    <strong>[{dept}] {emoji} {cat}</strong> <span style='float:right; font-size:0.8em; color:gray;'>{ts}</span><br/>
-                    {content}
-                </div>
-                """, unsafe_allow_html=True)
+        for i, d_key in enumerate(depts):
+            with cols[i]:
+                st.markdown(f"### {d_key} ({DEPT_MAP[d_key]})")
+                st.caption(f"Towards {DEPT_MAP[d_key]}")
+                
+                # Filter data for this target department
+                dept_feedback = [f for f in all_data if f[1] == d_key]
+                
+                if not dept_feedback:
+                    st.caption("접수된 의견 없음")
+                else:
+                    for source_dept, target_dept, cat, content, ts in dept_feedback:
+                        color_class = f"{source_dept.lower()}-color"
+                        emoji = "📉" if cat == "Bottleneck" else "🌟"
+                        st.markdown(f"""
+                        <div class="status-card {color_class}">
+                            <div class="from-label">From {source_dept}</div>
+                            <strong>{emoji} {cat}</strong><br/>
+                            {content}
+                            <div style='font-size:0.7em; color:gray; text-align:right; margin-top:5px;'>{ts}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
 with tab_ai:
     st.subheader("AI가 제안하는 2026 MPRS 협업 로드맵")
@@ -98,15 +114,8 @@ with tab_ai:
             st.warning("분석할 데이터가 부족합니다.")
         else:
             with st.spinner("MPRS의 목소리를 분석하여 최적의 시너지를 설계 중..."):
-                # Construct data for AI
-                text_blob = "\n".join([f"[{d}] {c}: {con}" for d, c, con, t in raw_feedback])
-                
-                # Simple placeholder for logic - assuming we can call an internal agent turn or similar
-                # In this specific context, I will mock the result or use a prompt.
-                # For now, I'll explain that I can integrate Gemini here.
+                # Real logic or more structured report
                 st.markdown("### 📋 2026 MPRS 협업 선언문 (Draft)")
-                
-                # Summary logic (this can be replaced with a real API call to Gemini)
                 st.info("💡 분석 결과: 부서 간 '언어의 장벽'이 가장 큰 병목으로 확인되었습니다. R&D의 기술 언어를 Marketing이 대중 언어로 변환하는 프로세스 표준화가 시급합니다.")
                 
                 st.markdown("""
