@@ -227,8 +227,8 @@ def main():
             
             /* The track (background) of the toggle */
             div[data-testid="stCheckbox"] div[role="switch"] {
-                background-color: #cbd5e1 !important; /* light slate gray */
-                border: 2px solid #64748b !important; /* darker border */
+                background-color: #64748b !important; /* darker slate gray for visibility */
+                border: 2px solid #334155 !important;
             }
             /* The handle (circle) of the toggle */
             div[data-testid="stCheckbox"] div[role="switch"] > div {
