@@ -119,9 +119,28 @@ with tab_matrix:
     if all_data:
         m_df = pd.DataFrame(all_data, columns=["id","from","target","cat","tag","content","sit","imp","sev","eff","likes","ts"])
         import plotly.express as px
-        fig = px.scatter(m_df, x="eff", y="sev", color="cat", size=[l+1 for l in m_df['likes']], hover_name="content", text="from", range_x=[0.5, 5.5], range_y=[0.5, 5.5], color_discrete_map={"Bottleneck": "#ED1C24", "Synergy": "#FFB100"})
-        fig.add_hline(y=3, line_dash="dash", line_color="gray"); fig.add_vline(x=3, line_dash="dash", line_color="gray")
+        # 축을 (0,0) 기준으로 두고 양수영역만 사용
+        fig = px.scatter(
+            m_df,
+            x="eff",
+            y="sev",
+            color="cat",
+            size=[l + 1 for l in m_df["likes"]],
+            hover_name="content",
+            text="from",
+            range_x=[0, 6],
+            range_y=[0, 6],
+            color_discrete_map={"Bottleneck": "#ED1C24", "Synergy": "#FFB100"},
+        )
+        # 4분면 가이드(3,3)
+        fig.add_hline(y=3, line_dash="dash", line_color="gray")
+        fig.add_vline(x=3, line_dash="dash", line_color="gray")
+        # (0,0) 축 라인 표시
+        fig.add_hline(y=0, line_color="#111", line_width=2)
+        fig.add_vline(x=0, line_color="#111", line_width=2)
+
         st.plotly_chart(fig, use_container_width=True)
+        st.caption("축은 (0,0) 기준이며 값은 양수 영역(0~6)만 사용합니다.")
 
 with tab_ai:
     st.subheader("🔮 실시간 보드 기반 AI 협업 전략")
