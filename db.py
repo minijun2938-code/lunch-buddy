@@ -420,6 +420,27 @@ def init_db():
            ON friends(requester_id, status)"""
     )
 
+    # Match events (admin analytics)
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS match_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            meal TEXT,
+            host_user_id INTEGER,
+            member_user_ids TEXT,
+            member_count INTEGER,
+            kind TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(date, meal, host_user_id)
+        )
+        """
+    )
+    c.execute(
+        """CREATE INDEX IF NOT EXISTS idx_match_events_day_meal
+           ON match_events(date, meal)"""
+    )
+
     conn.commit()
     conn.close()
 
@@ -1767,6 +1788,69 @@ def _norm_meal(meal: str | None) -> str:
     # Support private modes
     valid = ("lunch", "dinner", "lunch_p", "dinner_p")
     return m if m in valid else ("dinner" if "dinner" in m else "lunch")
+
+
+def refresh_match_events_today():
+    """Rebuild today's match_events snapshot from current groups + members.
+
+    Rule: a 'match' is a group with >=2 members (including host).
+    Includes private meals (lunch_p/dinner_p).
+    """
+    today = kst_today_iso()
+    conn = get_connection()
+    c = conn.cursor()
+
+    meals = ["lunch", "dinner", "lunch_p", "dinner_p"]
+    for meal in meals:
+        # Find hosts that have a group today for this meal
+        c.execute(
+            "SELECT host_user_id, kind FROM lunch_groups WHERE date=? AND meal=?",
+            (today, meal),
+        )
+        hosts = c.fetchall()  # (host_user_id, kind)
+
+        for host_user_id, kind in hosts:
+            # Get normalized member ids
+            c.execute(
+                "SELECT user_id FROM group_members WHERE date=? AND meal=? AND host_user_id=? ORDER BY user_id",
+                (today, meal, int(host_user_id)),
+            )
+            member_ids = [int(r[0]) for r in c.fetchall()]
+            if len(member_ids) < 2:
+                continue
+
+            member_user_ids = ",".join(map(str, member_ids))
+            member_count = len(member_ids)
+
+            c.execute(
+                """
+                INSERT OR REPLACE INTO match_events (id, date, meal, host_user_id, member_user_ids, member_count, kind, updated_at)
+                VALUES ((SELECT id FROM match_events WHERE date=? AND meal=? AND host_user_id=?), ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (today, meal, int(host_user_id), today, meal, int(host_user_id), member_user_ids, int(member_count), kind),
+            )
+
+    conn.commit()
+    conn.close()
+
+
+def list_match_events(date_str: str | None = None, *, meal: str | None = None, limit: int = 200):
+    date_str = date_str or kst_today_iso()
+    conn = get_connection()
+    c = conn.cursor()
+
+    q = "SELECT date, meal, host_user_id, member_user_ids, member_count, kind, updated_at FROM match_events WHERE date=?"
+    params = [date_str]
+    if meal:
+        q += " AND meal=?"
+        params.append(_norm_meal(meal))
+    q += " ORDER BY updated_at DESC LIMIT ?"
+    params.append(int(limit))
+
+    c.execute(q, params)
+    rows = c.fetchall()
+    conn.close()
+    return rows
 
 
 def _norm_kind(kind: str | None) -> str | None:

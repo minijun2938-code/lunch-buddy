@@ -469,6 +469,70 @@ def main():
         st.info("왼쪽에서 로그인해줘.")
         st.stop()
 
+    # --- Admin page (hidden) ---
+    if str(st.query_params.get("admin") or "") == "1":
+        # Simple admin login (credentials via Streamlit secrets/env)
+        import os
+        try:
+            admin_id_conf = st.secrets.get("ADMIN_ID")
+            admin_pw_conf = st.secrets.get("ADMIN_PASSWORD")
+        except Exception:
+            admin_id_conf = None
+            admin_pw_conf = None
+        admin_id_conf = admin_id_conf or os.environ.get("ADMIN_ID")
+        admin_pw_conf = admin_pw_conf or os.environ.get("ADMIN_PASSWORD")
+
+        st.subheader("🔐 관리자 로그인")
+        aid = st.text_input("관리자 ID", key="admin_id_input")
+        apw = st.text_input("관리자 PW", type="password", key="admin_pw_input")
+        if st.button("로그인", key="admin_login_btn"):
+            if (aid == (admin_id_conf or "")) and (apw == (admin_pw_conf or "")):
+                st.session_state["is_admin"] = True
+            else:
+                st.error("관리자 인증 실패")
+
+        if not st.session_state.get("is_admin", False):
+            st.stop()
+
+        st.success("관리자 모드")
+        # Refresh snapshot and show analytics
+        try:
+            db.refresh_match_events_today()
+        except Exception:
+            pass
+
+        # Filters
+        sel_date = st.date_input("날짜", value=datetime.date.fromisoformat(today_str), key="admin_date")
+        sel_meal = st.selectbox("Meal", ["all", "lunch", "dinner", "lunch_p", "dinner_p"], index=0, key="admin_meal")
+        meal_filter = None if sel_meal == "all" else sel_meal
+
+        rows = db.list_match_events(str(sel_date), meal=meal_filter, limit=300)
+        st.caption(f"총 {len(rows)}건")
+
+        # Summary stats
+        total_people = 0
+        for _d, _m, _h, _ids, cnt, _k, _u in rows:
+            total_people += int(cnt or 0)
+        st.metric("매칭 그룹 수", len(rows))
+        st.metric("총 참여 인원(중복 포함)", total_people)
+
+        # Detail table
+        for d, m, host_uid, member_ids, member_count, kind, updated_at in rows:
+            with st.container(border=True):
+                st.write(f"**{d} | {m} | 멤버 {member_count}명**")
+                st.caption(f"업데이트: {updated_at}")
+                st.write("호스트: " + db.get_display_name(int(host_uid)))
+                try:
+                    ids = [int(x) for x in (member_ids or "").split(",") if x.strip()]
+                except Exception:
+                    ids = []
+                if ids:
+                    st.write("멤버: " + ", ".join([db.get_display_name(i) for i in ids]))
+                if kind:
+                    st.caption("타입: " + ("🍻 술" if kind == "drink" else "🍚 밥"))
+
+        st.stop()
+
     # global auto refresh (invites + colleagues)
     # Pause refresh while a confirmation dialog is open (otherwise it disappears)
     if not st.session_state.get("pause_refresh", False):
@@ -479,6 +543,12 @@ def main():
 
     # Priority: accepted -> Booked
     db.reconcile_user_today(user_id, meal=meal)
+
+    # Admin analytics snapshot (best-effort)
+    try:
+        db.refresh_match_events_today()
+    except Exception:
+        pass
 
     # Time-out logic: if meal is expired, Free/Hosting statuses are hidden from board.
     expired = db.is_meal_expired(meal)
