@@ -58,6 +58,26 @@ def init_db():
         )
     """)
 
+    # --- Consolidated TODOs & voting ---
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS todo_items (
+            todo_key TEXT PRIMARY KEY,
+            group_title TEXT,
+            todo_text TEXT,
+            order_index INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS todo_votes (
+            todo_key TEXT,
+            voter_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(todo_key, voter_id)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_todo_votes_todo_key ON todo_votes(todo_key)")
+
     # --- Action canvas items (workshop outcomes) ---
     c.execute("""
         CREATE TABLE IF NOT EXISTS action_items (
@@ -116,6 +136,73 @@ def clear_ai_suggestions():
     c.execute("DELETE FROM ai_suggestions")
     conn.commit()
     conn.close()
+
+
+# --- TODO items & votes ---
+def clear_todos(keep_votes: bool = False):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    if not keep_votes:
+        c.execute("DELETE FROM todo_votes")
+    c.execute("DELETE FROM todo_items")
+    conn.commit()
+    conn.close()
+
+
+def upsert_todo_item(todo_key: str, group_title: str, todo_text: str, order_index: int):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        """
+        INSERT INTO todo_items(todo_key, group_title, todo_text, order_index)
+        VALUES(?,?,?,?)
+        ON CONFLICT(todo_key) DO UPDATE SET group_title=excluded.group_title, todo_text=excluded.todo_text, order_index=excluded.order_index
+        """,
+        (todo_key, group_title, todo_text, order_index),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_todo_items():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        """
+        SELECT todo_key, group_title, todo_text, order_index
+        FROM todo_items
+        ORDER BY order_index ASC
+        """
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def vote_todo(todo_key: str, voter_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO todo_votes(todo_key, voter_id) VALUES(?,?)", (todo_key, voter_id))
+    conn.commit()
+    conn.close()
+
+
+def has_voted_todo(todo_key: str, voter_id: str) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM todo_votes WHERE todo_key=? AND voter_id=?", (todo_key, voter_id))
+    row = c.fetchone()
+    conn.close()
+    return bool(row)
+
+
+def get_todo_vote_counts():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT todo_key, COUNT(*) FROM todo_votes GROUP BY todo_key")
+    rows = c.fetchall()
+    conn.close()
+    return {k: v for k, v in rows}
 
 # --- Shared app state helpers ---
 def set_state(key: str, value: str):

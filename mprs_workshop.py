@@ -96,6 +96,7 @@ with st.sidebar:
             db.clear_db()
             db.clear_action_items()
             db.clear_ai_suggestions()
+            db.clear_todos()
             db.set_state("canvas_open", "0")
             db.set_state("todo_open", "0")
             st.success("초기화 완료")
@@ -522,6 +523,10 @@ if tab_todo is not None:
             cluster_rows.sort(key=lambda x: x[0], reverse=True)
 
             if st.button("✨ 종합 To-do 생성", use_container_width=True):
+                import hashlib
+                # regenerate todo_items (votes are collected after generation)
+                db.clear_todos(keep_votes=True)
+
                 md = []
                 md.append("# SK Enmove MPRS Workshop - 종합 To-do List (캔버스 통합)")
                 md.append("")
@@ -541,16 +546,48 @@ if tab_todo is not None:
                     todos = _cluster_todos(rows)
                     md.append("- To-do:")
                     if todos:
-                        md += [f"  - [ ] {x}" for x in todos]
+                        for k, x in enumerate(todos):
+                            # deterministic key based on group title + todo text
+                            key_src = (title + "||" + x).strip().lower()
+                            todo_key = hashlib.sha1(key_src.encode("utf-8")).hexdigest()[:16]
+                            order_index = (n * 1000) + k
+                            db.upsert_todo_item(todo_key, title, x, order_index)
+                            md.append(f"  - [ ] {x}")
                     else:
-                        md.append("  - [ ] (제안 내용이 비어있음) 캔버스에 해결 방안을 추가")
+                        x = "(제안 내용이 비어있음) 캔버스에 해결 방안을 추가"
+                        key_src = (title + "||" + x).strip().lower()
+                        todo_key = hashlib.sha1(key_src.encode("utf-8")).hexdigest()[:16]
+                        order_index = (n * 1000)
+                        db.upsert_todo_item(todo_key, title, x, order_index)
+                        md.append(f"  - [ ] {x}")
                     md.append("")
 
                 st.session_state["canvas_todo"] = "\n".join(md)
 
+            # Display consolidated todo markdown + voting UI
             todo = st.session_state.get("canvas_todo")
             if todo:
                 st.markdown(todo)
+
+                st.markdown("---")
+                st.markdown("## 🗳️ To-do 투표")
+                st.caption("각 To-do 항목마다 1번씩 투표할 수 있습니다. (순서는 투표로 바뀌지 않음)")
+
+                todo_items = db.get_todo_items()
+                vote_counts = db.get_todo_vote_counts()
+
+                for todo_key, group_title, todo_text, order_index in todo_items:
+                    voted = db.has_voted_todo(todo_key, author_id)
+                    cnt = vote_counts.get(todo_key, 0)
+                    c1, c2 = st.columns([6, 1])
+                    with c1:
+                        st.write(f"- {todo_text}")
+                        st.caption(f"그룹: {group_title}")
+                    with c2:
+                        if st.button(f"👍 {cnt}", key=f"todo_vote_{todo_key}", disabled=voted):
+                            db.vote_todo(todo_key, author_id)
+                            st.rerun()
+
                 st.download_button(
                     "📥 종합 To-do 다운로드 (Markdown)",
                     data=todo.encode("utf-8"),
