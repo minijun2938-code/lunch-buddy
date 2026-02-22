@@ -1417,23 +1417,63 @@ def clear_group_chat(host_user_id: int, date_str: str, *, meal: str = "lunch"):
     conn.close()
 
 
+def _ensure_group_chat_meal_column(conn):
+    """Runtime guard: older DBs may not have group_chat.meal."""
+    try:
+        c = conn.cursor()
+        c.execute("PRAGMA table_info(group_chat)")
+        cols = {r[1] for r in c.fetchall()}
+        if "meal" not in cols:
+            c.execute("ALTER TABLE group_chat ADD COLUMN meal TEXT")
+            # backfill
+            c.execute("UPDATE group_chat SET meal='lunch' WHERE meal IS NULL OR meal='' ")
+            try:
+                c.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_group_chat_day_host ON group_chat(date, meal, host_user_id, timestamp)"
+                )
+            except Exception:
+                pass
+            conn.commit()
+    except Exception:
+        pass
+
+
 def list_group_chat(host_user_id: int, date_str: str, *, meal: str = "lunch", limit: int = 200):
     meal = _norm_meal(meal)
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT user_id, username, message, timestamp
-        FROM group_chat
-        WHERE date=? AND meal=? AND host_user_id=?
-        ORDER BY timestamp ASC
-        LIMIT ?
-        """,
-        (date_str, meal, host_user_id, int(limit)),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return rows
+    try:
+        _ensure_group_chat_meal_column(conn)
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT user_id, username, message, timestamp
+            FROM group_chat
+            WHERE date=? AND meal=? AND host_user_id=?
+            ORDER BY timestamp ASC
+            LIMIT ?
+            """,
+            (date_str, meal, host_user_id, int(limit)),
+        )
+        rows = c.fetchall()
+        return rows
+    except sqlite3.OperationalError as e:
+        # fallback for legacy schema
+        if "meal" in str(e).lower():
+            c = conn.cursor()
+            c.execute(
+                """
+                SELECT user_id, username, message, timestamp
+                FROM group_chat
+                WHERE date=? AND host_user_id=?
+                ORDER BY timestamp ASC
+                LIMIT ?
+                """,
+                (date_str, host_user_id, int(limit)),
+            )
+            return c.fetchall()
+        raise
+    finally:
+        conn.close()
 
 
 def add_group_chat(host_user_id: int, user_id: int, username: str, message: str, date_str: str, *, meal: str = "lunch") -> tuple[bool, str | None]:
@@ -1446,14 +1486,27 @@ def add_group_chat(host_user_id: int, user_id: int, username: str, message: str,
         return False, "그룹 멤버만 채팅을 사용할 수 있어요."
 
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO group_chat(date, meal, host_user_id, user_id, username, message, timestamp) VALUES (?,?,?,?,?,?,?,?)",
-        (date_str, meal, host_user_id, user_id, username, message, kst_now_str()),
-    )
-    conn.commit()
-    conn.close()
-    return True, None
+    try:
+        _ensure_group_chat_meal_column(conn)
+        c = conn.cursor()
+        try:
+            c.execute(
+                "INSERT INTO group_chat(date, meal, host_user_id, user_id, username, message, timestamp) VALUES (?,?,?,?,?,?,?,?)",
+                (date_str, meal, host_user_id, user_id, username, message, kst_now_str()),
+            )
+        except sqlite3.OperationalError as e:
+            # legacy fallback
+            if "meal" in str(e).lower():
+                c.execute(
+                    "INSERT INTO group_chat(date, host_user_id, user_id, username, message, timestamp) VALUES (?,?,?,?,?,?)",
+                    (date_str, host_user_id, user_id, username, message, kst_now_str()),
+                )
+            else:
+                raise
+        conn.commit()
+        return True, None
+    finally:
+        conn.close()
 
 
 def list_my_group_dates(user_id: int, *, meal: str = "lunch", limit: int = 30):
