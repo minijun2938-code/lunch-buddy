@@ -350,7 +350,7 @@ def main():
                     host_id = db.get_latest_accepted_group_host_today(user_id, meal=meal)
                     if host_id:
                         try:
-                            db.ensure_member_in_group(int(host_id), int(user_id), today_str)
+                            db.ensure_member_in_group(int(host_id), int(user_id), today_str, meal=meal)
                         except Exception:
                             pass
                         my_groups_today = db.get_groups_for_user_today(user_id, meal=meal)
@@ -588,7 +588,7 @@ def main():
                 for req_id, from_uid, from_name, status, ts, group_host_user_id, req_kind in incoming:
                     with st.container(border=True):
                         if group_host_user_id:
-                            g = db.get_group_by_host_today(int(group_host_user_id, meal=meal))
+                            g = db.get_group_by_host_today(int(group_host_user_id), meal=meal)
                             st.write(f"**{from_name}** → 나 (그룹 합류 초대)")
                             if g:
                                 _gid, _d, _host_uid, host_name, member_names, seats_left, menu, payer_name, g_kind = g
@@ -635,14 +635,14 @@ def main():
                                         # If I already have a group today, add the other into that group.
                                         my_groups = db.get_groups_for_user_today(user_id, meal=meal)
                                         if my_groups:
-                                            _gid, _d, my_host_uid, _hn, _mn, _sl, _m, _p = my_groups[0]
-                                            db.add_member_fixed_group(int(my_host_uid, meal=meal), int(from_uid), from_name)
+                                            _gid, _d, my_host_uid, _hn, _mn, _sl, _m, _p, _k = my_groups[0]
+                                            db.add_member_fixed_group(int(my_host_uid), int(from_uid), from_name, meal=meal)
                                         else:
                                             # create a fixed group for me and add the partner
                                             # New booking → reset chat
-                                            db.clear_group_chat(int(user_id), today_str)
-                                            db.ensure_fixed_group_today(int(user_id, meal=meal))
-                                            db.add_member_fixed_group(int(user_id, meal=meal), int(from_uid), from_name)
+                                            db.clear_group_chat(int(user_id), today_str, meal=meal)
+                                            db.ensure_fixed_group_today(int(user_id), meal=meal)
+                                            db.add_member_fixed_group(int(user_id), int(from_uid), from_name, meal=meal)
 
                                         # (optional) also ensure legacy 1:1 group exists for detail compatibility
                                         db.ensure_1to1_group_today(user_id, from_uid, meal=meal, kind=my_kind)
