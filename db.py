@@ -795,22 +795,34 @@ def upsert_group(
     conn.close()
 
 
-def get_groups_today(*, meal: str = "lunch"):
-    """Return today's hosting groups for a meal."""
+def get_groups_today(*, meal: str = "lunch", viewer_friends_ids: list[int] | None = None):
+    """Return today's hosting groups for a meal.
+    If viewer_friends_ids is provided, only show groups hosted by those friends.
+    """
     today = kst_today_iso()
     meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        """
+
+    query = """
         SELECT g.id, g.host_user_id, u.username, g.member_names, g.seats_left, g.menu, g.payer_name, g.kind
         FROM lunch_groups g
         JOIN users u ON u.user_id = g.host_user_id
         WHERE g.date=? AND g.meal=?
-        ORDER BY g.id DESC
-        """,
-        (today, meal),
-    )
+    """
+    params = [today, meal]
+
+    if viewer_friends_ids is not None:
+        # Private mode filter
+        if not viewer_friends_ids:
+            conn.close()
+            return []
+        placeholders = ",".join(["?"] * len(viewer_friends_ids))
+        query += f" AND g.host_user_id IN ({placeholders})"
+        params.extend(viewer_friends_ids)
+
+    query += " ORDER BY g.id DESC"
+    c.execute(query, params)
     rows = c.fetchall()
     conn.close()
     return rows
@@ -1675,20 +1687,32 @@ def _has_host_group_today(user_id: int, *, meal: str = "lunch") -> bool:
     return bool(row)
 
 
-def get_all_statuses(*, meal: str = "lunch"):
-    """Return all users + computed-safe status for today (per meal)."""
+def get_all_statuses(*, meal: str = "lunch", viewer_friends_ids: list[int] | None = None):
+    """Return all users + computed-safe status for today (per meal).
+    If viewer_friends_ids is provided (private mode), filter the user list.
+    """
     today = kst_today_iso()
     meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        """
+
+    query = """
         SELECT u.user_id, u.username, COALESCE(ds.status, 'Not Set') as status, u.telegram_chat_id, ds.kind
         FROM users u
         LEFT JOIN daily_status ds ON u.user_id = ds.user_id AND ds.date = ? AND ds.meal = ?
-        """,
-        (today, meal),
-    )
+        WHERE 1=1
+    """
+    params = [today, meal]
+
+    if viewer_friends_ids is not None:
+        if not viewer_friends_ids:
+            conn.close()
+            return []
+        placeholders = ",".join(["?"] * len(viewer_friends_ids))
+        query += f" AND u.user_id IN ({placeholders})"
+        params.extend(viewer_friends_ids)
+
+    c.execute(query, params)
     results = c.fetchall()
     conn.close()
 
@@ -1702,9 +1726,24 @@ def get_all_statuses(*, meal: str = "lunch"):
     return fixed
 
 
+def search_users(query: str, exclude_id: int):
+    conn = get_connection()
+    c = conn.cursor()
+    q = f"%{query}%"
+    c.execute(
+        "SELECT user_id, username, english_name, team FROM users WHERE (username LIKE ? OR english_name LIKE ? OR team LIKE ?) AND user_id != ? LIMIT 20",
+        (q, q, q, exclude_id),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
 def _norm_meal(meal: str | None) -> str:
     m = (meal or "lunch").strip().lower()
-    return "dinner" if m == "dinner" else "lunch"
+    # Support private modes
+    valid = ("lunch", "dinner", "lunch_p", "dinner_p")
+    return m if m in valid else ("dinner" if "dinner" in m else "lunch")
 
 
 def _norm_kind(kind: str | None) -> str | None:

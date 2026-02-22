@@ -74,6 +74,7 @@ def main():
         st.stop()
 
     # --- Meal state initialization ---
+    # Base meal (lunch/dinner) decided by time or toggle
     if "meal" not in st.session_state:
         # Default to dinner after 2 PM (14:00) KST
         now_kst = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=9)
@@ -82,12 +83,17 @@ def main():
         else:
             st.session_state["meal"] = "lunch"
 
-    # We use the toggle value directly if it exists in session_state to avoid lag.
-    if "meal_toggle" in st.session_state:
-        st.session_state["meal"] = "dinner" if st.session_state["meal_toggle"] else "lunch"
+    # We use the toggle values directly if they exist in session_state to avoid lag.
+    base_meal = "dinner" if st.session_state.get("meal_toggle") else "lunch"
+    is_private = st.session_state.get("privacy_toggle", False)
+    
+    final_meal = f"{base_meal}_p" if is_private else base_meal
+    st.session_state["meal"] = final_meal
 
     meal = st.session_state["meal"]
-    meal_label = "점심" if meal == "lunch" else "저녁"
+    is_p_mode = meal.endswith("_p")
+    base_label = "점심" if "lunch" in meal else "저녁"
+    meal_label = f"{base_label}({'🔒' if is_p_mode else '🔓'})"
 
     st.title("[Enmover Meal Finder, EMF]")
     st.markdown(f"### 오늘 {meal_label} 드실분 ? ({today_kor})")
@@ -264,8 +270,11 @@ def main():
 
         # Meal toggle: label reflects current mode
         toggle_label = "🌙 저녁 모드" if st.session_state.get("meal_toggle") else "☀️ 점심 모드"
-        st.toggle(toggle_label, value=(st.session_state["meal"] == "dinner"), key="meal_toggle")
-        # (State is updated at the top of main() on the next rerun triggered by this toggle)
+        st.toggle(toggle_label, value=("dinner" in st.session_state["meal"]), key="meal_toggle")
+
+        # --- Privacy mode toggle ---
+        st.toggle("🔒 프라이빗 모드", value=st.session_state["meal"].endswith("_p"), key="privacy_toggle")
+        st.caption("(프라이빗: 밥친구에게만 내 상태 공개/친구 상태 확인)")
 
         # --- Hosting cancel confirmation dialog ---
         @st.dialog("모집 취소 확인")
@@ -477,10 +486,65 @@ def main():
     if db.get_status_today(user_id, meal=meal) == "Hosting" and not db.get_group_by_host_today(user_id, meal=meal):
         db.clear_status_today(user_id, meal=meal)
 
+    # Prepare friend list for private filtering
+    my_friends_ids = None
+    if is_p_mode:
+        my_friends_ids = db.list_friends(user_id)
+        # Always include myself in the filter so I can see my own status/group
+        my_friends_ids.append(user_id)
+
     tab_my, tab_board = st.tabs([
-        f"🍱 오늘 나의 {('점심' if meal=='lunch' else '저녁')} 현황",
-        f"📌 {('점심' if meal=='lunch' else '저녁')}찾기 게시판",
+        f"🍱 오늘 나의 {base_label} 현황",
+        f"📌 {base_label}찾기 게시판",
     ])
+    
+    if is_p_mode:
+        with st.sidebar:
+            st.markdown("---")
+            st.subheader("👫 밥친구 관리")
+            
+            f_tab1, f_tab2 = st.tabs(["내 친구", "요청"])
+            with f_tab1:
+                fids = db.list_friends(user_id)
+                if not fids:
+                    st.caption("아직 밥친구가 없어요.")
+                else:
+                    for fid in fids:
+                        f_row = db.get_user_by_id(fid)
+                        if f_row:
+                            col_a, col_b = st.columns([3, 1])
+                            col_a.write(db.get_display_name(fid))
+                            if col_b.button("삭제", key=f"del_f_{fid}"):
+                                db.remove_friend(user_id, fid)
+                                st.rerun()
+
+                st.markdown("**🔍 친구 찾기**")
+                f_query = st.text_input("이름/팀명 검색", key="f_search_input")
+                if f_query:
+                    results = db.search_users(f_query, user_id)
+                    for rid, rname, reng, rteam in results:
+                        col_a, col_b = st.columns([3, 1])
+                        col_a.write(f"{rname} ({rteam})")
+                        if col_b.button("신청", key=f"req_f_{rid}"):
+                            ok, err = db.send_friend_request(user_id, rid)
+                            if ok: st.success("요청 보냄")
+                            else: st.error(err)
+
+            with f_tab2:
+                pending = db.list_pending_requests(user_id)
+                if not pending:
+                    st.caption("받은 요청이 없어요.")
+                else:
+                    for p in pending:
+                        st.write(f"**{p['username']}** ({p['team']})")
+                        ca, cb = st.columns(2)
+                        if ca.button("수락", key=f"acc_f_{p['user_id']}", use_container_width=True):
+                            db.accept_friend_request(user_id, p['user_id'])
+                            st.rerun()
+                        if cb.button("거절", key=f"rej_f_{p['user_id']}", use_container_width=True):
+                            db.remove_friend(user_id, p['user_id'])
+                            st.rerun()
+
     with tab_my:
             # --- My status ---
             st.subheader("🙋 내 현황")
@@ -1024,11 +1088,11 @@ def main():
 
             my_status_board, my_kind_board = db.get_status_row_today(user_id, meal=meal)
 
-            all_statuses = db.get_all_statuses(meal=meal)
+            all_statuses = db.get_all_statuses(meal=meal, viewer_friends_ids=my_friends_ids)
             others = [s for s in all_statuses if s[0] != user_id]
 
             st.markdown(f"### 🧑‍🍳 오늘 {meal_label} 같이 하실분?")
-            groups = db.get_groups_today(meal=meal)
+            groups = db.get_groups_today(meal=meal, viewer_friends_ids=my_friends_ids)
             # rows: (gid, host_uid, host_name, member_names, seats_left, menu, payer_name, kind)
             joinable = [] if expired else [g for g in groups if g[4] is None or int(g[4]) > 0]
             if not joinable:
