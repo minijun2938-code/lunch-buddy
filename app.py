@@ -313,6 +313,9 @@ def main():
     # Priority: accepted -> Booked
     db.reconcile_user_today(user_id, meal=meal)
 
+    # Time-out logic: if meal is expired, Free/Hosting statuses are hidden from board.
+    expired = db.is_meal_expired(meal)
+
     # Defensive cleanup: if status says Hosting but group row is missing, show (미정)
     if db.get_status_today(user_id, meal=meal) == "Hosting" and not db.get_group_by_host_today(user_id, meal=meal):
         db.clear_status_today(user_id, meal=meal)
@@ -345,19 +348,73 @@ def main():
                     else:
                         @st.dialog("정말 취소하시겠어요? (눈물)")
                         def _confirm_cancel_dialog():
-                            st.write("지금 잡힌 약속/그룹이 취소돼요. 괜찮아요?")
+                            # Determine if I'm the host of a multi-person group
+                            groups_now = db.get_groups_for_user_today(user_id, meal=meal)
+                            host_uid = None
+                            member_candidates = []
+                            if groups_now:
+                                _gid, _d, host_uid, _hn, _mn, _sl, _m, _p, _k = groups_now[0]
+                                members = db.list_group_members(int(host_uid), today_str, meal=meal)
+                                # candidates exclude me
+                                member_candidates = [(uid, db.format_name(n, en)) for uid, n, en in members if int(uid) != int(user_id)]
+
+                            is_host_multi = bool(host_uid) and (int(host_uid) == int(user_id)) and (len(member_candidates) >= 2)
+
+                            if is_host_multi:
+                                st.write("호스트라서, 취소 방식 선택이 필요해요.")
+                                mode = st.radio(
+                                    "선택",
+                                    ["전체 취소(모임 해산)", "방장 위임 후 나는 빠지기"],
+                                    index=0,
+                                    key="cancel_mode_radio",
+                                )
+                                new_host_id = None
+                                if mode == "방장 위임 후 나는 빠지기":
+                                    new_host_id = st.selectbox(
+                                        "새 방장 선택",
+                                        options=member_candidates,
+                                        format_func=lambda x: x[1],
+                                        key="new_host_select",
+                                    )
+                            else:
+                                st.write("지금 잡힌 약속/그룹이 취소돼요. 괜찮아요?")
+                                mode = "전체 취소(모임 해산)"
+                                new_host_id = None
+
                             c1, c2 = st.columns(2)
                             with c1:
                                 if st.button("예", type="primary", use_container_width=True, key="do_cancel_btn"):
-                                    ok, err = db.cancel_booking_for_user(user_id, meal=meal)
+                                    ok = True
+                                    err = None
+
+                                    if is_host_multi and mode == "방장 위임 후 나는 빠지기":
+                                        try:
+                                            # delegate host
+                                            chosen_uid = int(new_host_id[0]) if new_host_id else None
+                                            if not chosen_uid:
+                                                ok, err = False, "새 방장을 선택해줘."
+                                            else:
+                                                ok, err = db.delegate_host(today_str, meal, int(user_id), int(chosen_uid))
+                                                if ok:
+                                                    # remove myself from the delegated group
+                                                    db.remove_member_from_group(int(chosen_uid), int(user_id), today_str, meal=meal)
+                                                    db.cancel_accepted_for_users([int(user_id)], meal=meal)
+                                                    db.clear_status_today(int(user_id), meal=meal)
+                                        except Exception as e:
+                                            ok, err = False, str(e)
+                                    else:
+                                        ok, err = db.cancel_booking_for_user(user_id, meal=meal)
+
                                     st.session_state["confirm_cancel_open"] = False
                                     st.session_state["pause_refresh"] = False
+
                                     if ok:
                                         st.success("취소 완료")
                                         st.session_state.pop("hosting_open", None)
+                                        st.rerun()
                                     else:
                                         st.error(err or "취소 실패")
-                                    st.rerun()
+
                             with c2:
                                 if st.button("아니오", use_container_width=True, key="cancel_dialog_no_btn"):
                                     st.session_state["confirm_cancel_open"] = False
@@ -523,7 +580,7 @@ def main():
             with c1:
                 if is_lunch:
                     # 점심: 팀장/임원은 비활성화 유지
-                    free_disabled = base_free_disabled or (role in ("팀장", "임원"))
+                    free_disabled = base_free_disabled or (role in ("팀장", "임원")) or expired
                     if st.button("🙇‍♂️ 점약 없어요 불러주세요", use_container_width=True, disabled=free_disabled):
                         db.update_status(user_id, "Free", meal=meal)
                         st.rerun()
@@ -531,7 +588,7 @@ def main():
                         st.caption("(점심은 팀장/임원 '불러주세요' 비활성화)")
                 else:
                     # 저녁: 모두 가능 + 밥/술 구분
-                    if st.button("🍚 저녁 밥 가능", use_container_width=True, disabled=base_free_disabled):
+                    if st.button("🍚 저녁 밥 가능", use_container_width=True, disabled=(base_free_disabled or expired)):
                         db.update_status(user_id, "Free", meal=meal, kind="meal")
                         st.rerun()
 
@@ -545,13 +602,13 @@ def main():
                         db.update_status(user_id, "Skip", meal=meal)
                         st.rerun()
                 else:
-                    if st.button("🍻 저녁 술 가능", use_container_width=True, disabled=base_free_disabled):
+                    if st.button("🍻 저녁 술 가능", use_container_width=True, disabled=(base_free_disabled or expired)):
                         db.update_status(user_id, "Free", meal=meal, kind="drink")
                         st.rerun()
 
             with c3:
                 host_label = "🧑‍🍳 오늘 점심 같이 드실분?" if is_lunch else "🌙 오늘 저녁 같이 하실분?"
-                if st.button(host_label, use_container_width=True, disabled=False):
+                if st.button(host_label, use_container_width=True, disabled=expired):
                     currently_open = bool(st.session_state.get("hosting_open", False))
                     st.session_state["hosting_open"] = not currently_open
 
@@ -744,6 +801,9 @@ def main():
             is_lunch = (meal == "lunch")
             meal_label = "점심" if is_lunch else "저녁"
 
+            if expired:
+                st.warning(f"⏰ {meal_label} 타임아웃! (점심 1시 / 저녁 8시 이후에는 새 매칭이 마감돼요)")
+
             st.subheader(f"👀 동료들의 {meal_label} 현황")
 
             my_status_board, my_kind_board = db.get_status_row_today(user_id, meal=meal)
@@ -754,9 +814,9 @@ def main():
             st.markdown(f"### 🧑‍🍳 오늘 {meal_label} 같이 하실분?")
             groups = db.get_groups_today(meal=meal)
             # rows: (gid, host_uid, host_name, member_names, seats_left, menu, payer_name, kind)
-            joinable = [g for g in groups if g[4] is None or int(g[4]) > 0]
+            joinable = [] if expired else [g for g in groups if g[4] is None or int(g[4]) > 0]
             if not joinable:
-                st.caption("아직 모집 중인 팀이 없어요.")
+                st.caption("아직 모집 중인 팀이 없어요." if not expired else "타임아웃 이후에는 새 합류/모집이 마감돼요.")
             else:
                 for gid, host_uid, host_name, member_names, seats_left, menu, payer_name, g_kind in joinable:
                     with st.container(border=True):
@@ -796,9 +856,9 @@ def main():
             host_group = db.get_group_by_host_today(user_id, meal=meal)
 
             # include me too, so I can confirm my status is visible
-            free_people = [s for s in all_statuses if s[2] == "Free"]
+            free_people = [] if expired else [s for s in all_statuses if s[2] == "Free"]
             if not free_people:
-                st.caption("지금 '불러주세요' 상태인 사람이 없어요.")
+                st.caption("지금 '불러주세요' 상태인 사람이 없어요." if not expired else "타임아웃 이후에는 '불러주세요'를 표시하지 않아요.")
             else:
                 cols = st.columns(4)
                 for i, (uid, uname, _status, _chat, u_kind) in enumerate(free_people):

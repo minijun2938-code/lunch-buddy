@@ -1509,6 +1509,80 @@ def add_group_chat(host_user_id: int, user_id: int, username: str, message: str,
         conn.close()
 
 
+def is_meal_expired(meal: str) -> bool:
+    """Return True if current KST time is past the meal threshold.
+    Lunch: 13:00 (1 PM), Dinner: 20:00 (8 PM)
+    """
+    now_kst = datetime.datetime.now(timezone.utc) + timedelta(hours=9)
+    hour = now_kst.hour
+    if _norm_meal(meal) == "lunch":
+        return hour >= 13
+    else:
+        return hour >= 20
+
+
+def delegate_host(date_str: str, meal: str, old_host_id: int, new_host_id: int) -> tuple[bool, str | None]:
+    """Transfer hosting responsibilities to another member.
+
+    Notes:
+    - Disallow if new_host already has a hosting group for same date+meal (unique constraint).
+    """
+    meal = _norm_meal(meal)
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        # conflict check
+        c.execute(
+            "SELECT 1 FROM lunch_groups WHERE date=? AND meal=? AND host_user_id=? LIMIT 1",
+            (date_str, meal, int(new_host_id)),
+        )
+        if c.fetchone():
+            return False, "선택한 사람은 이미 같은 시간대에 호스트로 등록되어 있어요. 다른 사람을 선택해줘."
+
+        # Update lunch_groups host
+        c.execute(
+            "UPDATE lunch_groups SET host_user_id=? WHERE date=? AND meal=? AND host_user_id=?",
+            (int(new_host_id), date_str, meal, int(old_host_id)),
+        )
+        if c.rowcount == 0:
+            return False, "그룹을 찾을 수 없습니다."
+
+        # Update group_members
+        c.execute(
+            "UPDATE group_members SET host_user_id=? WHERE date=? AND meal=? AND host_user_id=?",
+            (int(new_host_id), date_str, meal, int(old_host_id)),
+        )
+
+        # Update group_chat
+        try:
+            c.execute(
+                "UPDATE group_chat SET host_user_id=? WHERE date=? AND meal=? AND host_user_id=?",
+                (int(new_host_id), date_str, meal, int(old_host_id)),
+            )
+        except Exception:
+            pass
+
+        # Update requests group_host_user_id
+        c.execute(
+            "UPDATE requests SET group_host_user_id=? WHERE date=? AND meal=? AND group_host_user_id=?",
+            (int(new_host_id), date_str, meal, int(old_host_id)),
+        )
+
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+    # keep legacy display fields aligned (best-effort)
+    try:
+        _rebuild_group_legacy_fields(int(new_host_id), date_str, meal=meal)
+    except Exception:
+        pass
+
+    conn.close()
+    return True, None
+
+
 def list_my_group_dates(user_id: int, *, meal: str = "lunch", limit: int = 30):
     meal = _norm_meal(meal)
     conn = get_connection()
@@ -1655,6 +1729,12 @@ def create_request(
     """
     meal = _norm_meal(meal)
     kind = _norm_kind(kind)
+
+    # time-out guard
+    if is_meal_expired(meal):
+        label = "점심" if meal == "lunch" else "저녁"
+        return None, f"{label} 타임아웃(마감) 이후에는 새 초대를 보낼 수 없어요."
+
     # one-meal rule
     # If I'm inviting someone into my own hosting group (group_host_user_id == from_user_id),
     # allow even if I'm already Booked/Planning.
@@ -1678,6 +1758,19 @@ def create_request(
     conn = get_connection()
     c = conn.cursor()
     try:
+        # Double-check latest status right before insert (reduce race issues)
+        if get_status_today(from_user_id, meal=meal) in ("Booked",):
+            return None, "이미 약속이 있는것 같아요!"
+        if get_status_today(to_user_id, meal=meal) in ("Booked",):
+            # allow only join-to-group exceptions (same logic as above)
+            ok = False
+            if group_host_user_id and int(group_host_user_id) == int(to_user_id):
+                ok = True
+            if group_host_user_id and int(group_host_user_id) == int(from_user_id):
+                ok = True
+            if not ok:
+                return None, "이미 약속이 있는것 같아요!"
+
         # If there is already a pending invite from->to today, don't spam.
         c.execute(
             """
