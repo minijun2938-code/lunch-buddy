@@ -78,7 +78,8 @@ def main():
         st.session_state["meal"] = "lunch"
 
     meal_label = "점심" if st.session_state["meal"] == "lunch" else "저녁"
-    st.title(f"Enmover Lunch Buddy 오늘 {meal_label} 드실분? ({today_kor})")
+    st.title("[Enmover Meal Finder, EMF]")
+    st.markdown(f"### 오늘 {meal_label} 드실분 ? ({today_kor})")
     st.caption(f"오늘 날짜: {today_str}")
 
     # Dinner mode: force dark-ish UI via CSS (Streamlit theme can't be switched per-run)
