@@ -156,7 +156,8 @@ def main():
             unsafe_allow_html=True,
         )
 
-    st.markdown("---")
+    # tighter separator (default --- is too tall)
+    st.markdown("<hr style='margin:0.35rem 0 0.6rem 0; border:0; border-top:1px solid rgba(128,128,128,0.35);'>", unsafe_allow_html=True)
 
     meal = st.session_state["meal"]
 
