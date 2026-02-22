@@ -223,7 +223,7 @@ def render_board(category: str):
 
                 if st.button(
                     "👍 이 카드에 투표",
-                    key=f"v_{fid}",
+                    key=f"v_{category}_{d_key}_{fid}",
                     disabled=(fid in st.session_state["voted_items"]),
                 ):
                     db.add_vote(fid)
