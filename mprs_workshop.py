@@ -55,16 +55,28 @@ with st.sidebar:
     admin_code = st.text_input("Admin Code", type="password")
     if admin_code == "0905":
         st.markdown("### 🎛️ 관리자 컨트롤")
-        c1, c2 = st.columns(2)
-        with c1:
+        r1c1, r1c2 = st.columns(2)
+        with r1c1:
             if st.button("🛠️ 아이디어 캔버스 오픈"):
                 db.set_state("canvas_open", "1")
                 st.success("아이디어 캔버스 탭이 공개되었습니다")
                 st.rerun()
-        with c2:
+        with r1c2:
             if st.button("🙈 아이디어 캔버스 숨김"):
                 db.set_state("canvas_open", "0")
                 st.success("아이디어 캔버스 탭을 숨겼습니다")
+                st.rerun()
+
+        r2c1, r2c2 = st.columns(2)
+        with r2c1:
+            if st.button("✅ 협업방안 생성 탭 오픈"):
+                db.set_state("todo_open", "1")
+                st.success("협업방안 생성 탭이 공개되었습니다")
+                st.rerun()
+        with r2c2:
+            if st.button("🙈 협업방안 생성 탭 숨김"):
+                db.set_state("todo_open", "0")
+                st.success("협업방안 생성 탭을 숨겼습니다")
                 st.rerun()
 
         if st.button("🚨 모든 데이터 초기화"):
@@ -72,6 +84,7 @@ with st.sidebar:
             db.clear_action_items()
             db.clear_ai_suggestions()
             db.set_state("canvas_open", "0")
+            db.set_state("todo_open", "0")
             st.success("초기화 완료")
             st.rerun()
 
@@ -96,19 +109,29 @@ with st.sidebar:
 # Main Header
 st.title("🚀 SK Enmove: MPRS Synergy Sync 2026")
 
-# Tabs (canvas tab is admin-toggled, shared via DB)
+# Tabs (admin-toggled, shared via DB)
 canvas_open = db.get_state("canvas_open", "0") == "1"
+todo_open = db.get_state("todo_open", "0") == "1"
 
 tabs = ["🗣️ 의견 남기기", "📉 병목 보드", "🌟 시너지 보드"]
 if canvas_open:
     tabs.append("🛠️ 아이디어 캔버스")
+if todo_open:
+    tabs.append("✅ 협업방안 생성")
 
 _tab_objs = st.tabs(tabs)
-if canvas_open:
+if canvas_open and todo_open:
+    tab_speak, tab_bn, tab_syn, tab_canvas, tab_todo = _tab_objs
+elif canvas_open and not todo_open:
     tab_speak, tab_bn, tab_syn, tab_canvas = _tab_objs
+    tab_todo = None
+elif (not canvas_open) and todo_open:
+    tab_speak, tab_bn, tab_syn, tab_todo = _tab_objs
+    tab_canvas = None
 else:
     tab_speak, tab_bn, tab_syn = _tab_objs
     tab_canvas = None
+    tab_todo = None
 
 
 def render_board(category: str):
@@ -233,11 +256,6 @@ with tab_syn:
     render_board("Synergy")
 
 
-# 우선순위 매트릭스 탭은 현재 숨김 처리 (요청 반영)
-if False:
-    with st.container():
-        st.subheader("Impact vs Effort 분석")
-
 # AI 전략 리포트 기능은 현재 숨김 처리 (요청 반영)
 if False:
     pass
@@ -245,20 +263,18 @@ if False:
 
 if tab_canvas is not None:
     with tab_canvas:
-        st.subheader("🛠️ 아이디어 캔버스 (투표 이후) ")
-        st.caption("실시간 투표 결과를 보고, 선택된 카드에 대한 ‘협업 아이디어’를 정리하는 공간입니다. (기한/일정 없음, 아이디어 중심)")
+        st.subheader("🛠️ 아이디어 캔버스 (투표 이후)")
+        st.caption("실시간 투표 결과를 보고, 선택된 카드에 대한 ‘해결 아이디어/구체적 방안’을 정리하는 공간입니다.")
 
         all_data = db.get_all_feedback()
         if not all_data:
             st.info("먼저 보드에 의견을 등록해 주세요.")
         else:
-            # top voted lists
             bn = [f for f in all_data if f[3] == "Bottleneck"]
             syn = [f for f in all_data if f[3] == "Synergy"]
             bn_top = sorted(bn, key=lambda x: x[10], reverse=True)[:8]
             syn_top = sorted(syn, key=lambda x: x[10], reverse=True)[:8]
 
-            # 작성할 카드 선택: 병목/시너지 중 하나만 선택하게 (숫자 선택 제거)
             pick_kind = st.radio("카테고리 선택", ["📉 병목", "🌟 시너지"], horizontal=True)
 
             if pick_kind.startswith("📉"):
@@ -292,13 +308,13 @@ if tab_canvas is not None:
                         st.write(f"**영향/효과:** {impact}")
 
                     with st.form("canvas_form", clear_on_submit=True):
-                        st.markdown("### 협업 아이디어(아이디어만)")
-                        idea1 = st.text_input("아이디어 1", placeholder="예: 협업 툴에 실시간 데이터 공유 보드를 만들고 링크/지표를 고정", key="cv_idea1")
-                        idea2 = st.text_input("아이디어 2", placeholder="예: 마케팅-연구소 정기 회의(월 1회)로 기술 스토리라인 합의", key="cv_idea2")
-                        idea3 = st.text_input("아이디어 3", placeholder="예: 요청/응답을 티켓으로 관리하고 상태를 공유", key="cv_idea3")
-                        collab_tool = st.text_input("협업 툴/채널(선택)", placeholder="예: Slack/Teams + Confluence/Notion + Jira/Asana", key="cv_tool")
-                        meeting_cadence = st.text_input("회의/싱크 방식(선택)", placeholder="예: 주 1회 30분 / 월 1회 60분", key="cv_cadence")
-                        notes = st.text_area("추가 메모(선택)", key="cv_notes")
+                        st.markdown("### 어떻게 하면 좋을까요?")
+                        proposal = st.text_area(
+                            "아이디어와 구체적 해결 방안을 제안해주세요.",
+                            placeholder="예: 협업 툴(Teams/Slack)에 ‘실시간 데이터 공유 보드’를 만들고, 공정/품질/시장반응 링크를 고정한다.\n예: 마케팅-연구소 월 1회 기술 브리핑으로 용어/스토리라인을 합의한다.",
+                            height=160,
+                            key="cv_proposal",
+                        )
                         saved = st.form_submit_button("💾 캔버스 저장")
                         if saved:
                             db.upsert_action_item(
@@ -308,16 +324,9 @@ if tab_canvas is not None:
                                 to_dept=to_dept,
                                 summary=summary,
                                 votes=likes,
-                                idea1=idea1,
-                                idea2=idea2,
-                                idea3=idea3,
-                                collab_tool=collab_tool,
-                                meeting_cadence=meeting_cadence,
-                                notes=notes,
+                                proposal=proposal,
                             )
-                            # 입력 박스 초기화 (혹시 모를 캐시/리런 대비)
-                            for k in ["cv_idea1","cv_idea2","cv_idea3","cv_tool","cv_cadence","cv_notes"]:
-                                st.session_state[k] = ""
+                            st.session_state["cv_proposal"] = ""
                             st.success("저장 완료")
                             st.rerun()
 
@@ -328,31 +337,16 @@ if tab_canvas is not None:
                 st.caption("아직 저장된 캔버스가 없습니다.")
             else:
                 md_lines = ["# MPRS Workshop Action Canvas", ""]
-                for (fid, cat, f, t, summary, votes, i1, i2, i3, tool, cadence, notes, created_at) in items:
+                for (fid, cat, f, t, summary, votes, proposal, created_at) in items:
                     st.markdown(f"**[{votes}표] {f}→{t} / {cat}**  ")
                     st.write(f"- {summary}")
-                    if i1:
-                        st.write(f"  - 아이디어1: {i1}")
-                    if i2:
-                        st.write(f"  - 아이디어2: {i2}")
-                    if i3:
-                        st.write(f"  - 아이디어3: {i3}")
-                    if tool:
-                        st.write(f"  - 협업툴: {tool}")
-                    if cadence:
-                        st.write(f"  - 회의: {cadence}")
-                    if notes:
-                        st.write(f"  - 메모: {notes}")
+                    if proposal:
+                        st.write(proposal)
 
                     md_lines += [
                         f"## [{votes}표] {f}→{t} / {cat}",
                         f"- 요약: {summary}",
-                        f"- 아이디어1: {i1}",
-                        f"- 아이디어2: {i2}",
-                        f"- 아이디어3: {i3}",
-                        f"- 협업툴: {tool}",
-                        f"- 회의: {cadence}",
-                        f"- 메모: {notes}",
+                        f"- 제안: {proposal}",
                         "",
                     ]
 
@@ -364,89 +358,73 @@ if tab_canvas is not None:
                     use_container_width=True,
                 )
 
-            st.markdown("---")
-            st.markdown("## ✅ 논의 내용 정리 → To-do 뽑기 (캔버스 기반)")
-            st.caption("자동 생성 결과는 ‘캔버스에 저장된 내용’만 사용해서 To-do로 변환합니다. (추측/헛소리 없음)")
+            # 협업방안/To-do 생성은 별도 탭에서 진행 (관리자 오픈)
 
-            items = db.get_action_items()
-            if not items:
-                st.info("캔버스에 저장된 항목이 없어서 To-do를 만들 수 없습니다.")
-            else:
-                def _todo_md(items_rows):
-                    # items: (feedback_id, category, from_dept, to_dept, summary, votes, idea1, idea2, idea3, tool, cadence, notes, created_at)
-                    bn = [r for r in items_rows if r[1] == "Bottleneck"]
-                    syn = [r for r in items_rows if r[1] == "Synergy"]
 
-                    def todos_for(r):
-                        fid, cat, f, t, summary, votes, i1, i2, i3, tool, cadence, notes, created_at = r
-                        ideas = [x for x in [i1, i2, i3] if x]
+if tab_todo is not None:
+    with tab_todo:
+        st.subheader("✅ 협업방안 생성 (To-do)")
+        st.caption("캔버스에 저장된 모든 논의 내용을 ‘실행 To-do’ 체크리스트로 변환합니다.")
 
-                        header = f"### [{votes}표] {f}→{t} / {('병목' if cat=='Bottleneck' else '시너지')}"
-                        lines = [header, f"- 원문(요약): {summary}"]
+        items = db.get_action_items()
+        if not items:
+            st.info("캔버스에 저장된 항목이 없어서 To-do를 만들 수 없습니다.")
+        else:
+            # items: (feedback_id, category, from_dept, to_dept, summary, votes, proposal, created_at)
+            def _todo_md(items_rows):
+                bn = [r for r in items_rows if r[1] == "Bottleneck"]
+                syn = [r for r in items_rows if r[1] == "Synergy"]
 
-                        # To-do 생성 규칙: idea 1~3을 그대로 체크리스트로
-                        lines.append("- To-do:")
-                        if ideas:
-                            lines += [f"  - [ ] {x}" for x in ideas]
-                        else:
-                            lines.append("  - [ ] (캔버스에 아이디어가 비어있음) 아이디어 1~3을 채우기")
+                def todos_for(r):
+                    fid, cat, f, t, summary, votes, proposal, created_at = r
+                    header = f"### [{votes}표] {f}→{t} / {('병목' if cat=='Bottleneck' else '시너지')}"
+                    lines = [header, f"- 원문(요약): {summary}"]
+                    lines.append("- To-do:")
 
-                        # 운영용 옵션들은 별도 체크
-                        if tool:
-                            lines.append(f"  - [ ] 협업 툴/채널 세팅: {tool}")
-                        if cadence:
-                            lines.append(f"  - [ ] 정기 싱크 운영 방식 확정: {cadence}")
-                        if notes:
-                            lines.append(f"- 메모: {notes}")
-
-                        return "\n".join(lines)
-
-                    # Cross-cutting summary
-                    tools = [r[9] for r in items_rows if r[9]]
-                    cadences = [r[10] for r in items_rows if r[10]]
-                    tool_hint = " / ".join(list(dict.fromkeys(tools))[:3])
-                    cadence_hint = " / ".join(list(dict.fromkeys(cadences))[:3])
-
-                    md = []
-                    md.append("# SK Enmove MPRS Workshop - To-do List (Canvas 기반)")
-                    md.append("")
-                    md.append("## 1) 전체 To-do 요약")
-                    md.append(f"- 캔버스 항목: {len(items_rows)}개 (병목 {len(bn)} / 시너지 {len(syn)})")
-                    if tool_hint:
-                        md.append(f"- 자주 언급된 협업 툴/채널(상위): {tool_hint}")
-                    if cadence_hint:
-                        md.append(f"- 자주 언급된 회의/싱크(상위): {cadence_hint}")
-                    md.append("")
-
-                    md.append("## 2) 병목 To-do (득표순)")
-                    if not bn:
-                        md.append("- (병목 항목 없음)")
+                    # proposal 문장을 줄 단위로 To-do화
+                    if proposal and proposal.strip():
+                        for ln in [x.strip(" -\t") for x in proposal.splitlines() if x.strip()]:
+                            lines.append(f"  - [ ] {ln}")
                     else:
-                        for r in bn:
-                            md.append(todos_for(r))
-                            md.append("")
+                        lines.append("  - [ ] (캔버스 제안이 비어있음) 해결 방안을 캔버스에 작성")
 
-                    md.append("## 3) 시너지 To-do (득표순)")
-                    if not syn:
-                        md.append("- (시너지 항목 없음)")
-                    else:
-                        for r in syn:
-                            md.append(todos_for(r))
-                            md.append("")
+                    return "\n".join(lines)
 
-                    return "\n".join(md)
+                md = []
+                md.append("# SK Enmove MPRS Workshop - To-do List (Canvas 기반)")
+                md.append("")
+                md.append(f"- 캔버스 항목: {len(items_rows)}개 (병목 {len(bn)} / 시너지 {len(syn)})")
+                md.append("")
 
-                if st.button("✨ To-do 생성", use_container_width=True):
-                    todo = _todo_md(items)
-                    st.session_state["canvas_todo"] = todo
+                md.append("## 병목 To-do (득표순)")
+                if not bn:
+                    md.append("- (병목 항목 없음)")
+                else:
+                    for r in bn:
+                        md.append(todos_for(r))
+                        md.append("")
 
-                todo = st.session_state.get("canvas_todo")
-                if todo:
-                    st.markdown(todo)
-                    st.download_button(
-                        "📥 To-do 다운로드 (Markdown)",
-                        data=todo.encode("utf-8"),
-                        file_name="mprs_todo.md",
-                        mime="text/markdown",
-                        use_container_width=True,
-                    )
+                md.append("## 시너지 To-do (득표순)")
+                if not syn:
+                    md.append("- (시너지 항목 없음)")
+                else:
+                    for r in syn:
+                        md.append(todos_for(r))
+                        md.append("")
+
+                return "\n".join(md)
+
+            if st.button("✨ To-do 생성", use_container_width=True):
+                todo = _todo_md(items)
+                st.session_state["canvas_todo"] = todo
+
+            todo = st.session_state.get("canvas_todo")
+            if todo:
+                st.markdown(todo)
+                st.download_button(
+                    "📥 To-do 다운로드 (Markdown)",
+                    data=todo.encode("utf-8"),
+                    file_name="mprs_todo.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )

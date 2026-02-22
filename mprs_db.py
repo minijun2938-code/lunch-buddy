@@ -68,15 +68,15 @@ def init_db():
             to_dept TEXT,
             summary TEXT,
             votes INTEGER DEFAULT 0,
-            idea1 TEXT,
-            idea2 TEXT,
-            idea3 TEXT,
-            collab_tool TEXT,
-            meeting_cadence TEXT,
-            notes TEXT,
+            proposal TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # Migration for older DBs: add proposal column if missing
+    c.execute("PRAGMA table_info(action_items)")
+    a_cols = [row[1] for row in c.fetchall()]
+    if "proposal" not in a_cols:
+        c.execute("ALTER TABLE action_items ADD COLUMN proposal TEXT")
     c.execute("CREATE INDEX IF NOT EXISTS idx_action_items_feedback_id ON action_items(feedback_id)")
     
     conn.commit()
@@ -128,24 +128,37 @@ def get_state(key: str, default: str = "") -> str:
     return row[0] if row else default
 
 # --- Action canvas helpers ---
-def upsert_action_item(feedback_id: int, category: str, from_dept: str, to_dept: str, summary: str, votes: int,
-                      idea1: str = "", idea2: str = "", idea3: str = "", collab_tool: str = "", meeting_cadence: str = "", notes: str = ""):
+def upsert_action_item(
+    feedback_id: int,
+    category: str,
+    from_dept: str,
+    to_dept: str,
+    summary: str,
+    votes: int,
+    proposal: str = "",
+):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     # 1 feedback -> 1 action item row
     c.execute("SELECT id FROM action_items WHERE feedback_id = ?", (feedback_id,))
     row = c.fetchone()
     if row:
-        c.execute("""
+        c.execute(
+            """
             UPDATE action_items
-            SET category=?, from_dept=?, to_dept=?, summary=?, votes=?, idea1=?, idea2=?, idea3=?, collab_tool=?, meeting_cadence=?, notes=?
+            SET category=?, from_dept=?, to_dept=?, summary=?, votes=?, proposal=?
             WHERE feedback_id=?
-        """, (category, from_dept, to_dept, summary, votes, idea1, idea2, idea3, collab_tool, meeting_cadence, notes, feedback_id))
+        """,
+            (category, from_dept, to_dept, summary, votes, proposal, feedback_id),
+        )
     else:
-        c.execute("""
-            INSERT INTO action_items(feedback_id, category, from_dept, to_dept, summary, votes, idea1, idea2, idea3, collab_tool, meeting_cadence, notes)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (feedback_id, category, from_dept, to_dept, summary, votes, idea1, idea2, idea3, collab_tool, meeting_cadence, notes))
+        c.execute(
+            """
+            INSERT INTO action_items(feedback_id, category, from_dept, to_dept, summary, votes, proposal)
+            VALUES(?,?,?,?,?,?,?)
+        """,
+            (feedback_id, category, from_dept, to_dept, summary, votes, proposal),
+        )
     conn.commit()
     conn.close()
 
@@ -153,7 +166,7 @@ def get_action_items():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("""
-        SELECT feedback_id, category, from_dept, to_dept, summary, votes, idea1, idea2, idea3, collab_tool, meeting_cadence, notes, created_at
+        SELECT feedback_id, category, from_dept, to_dept, summary, votes, proposal, created_at
         FROM action_items
         ORDER BY votes DESC, created_at DESC
     """)
