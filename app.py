@@ -124,6 +124,11 @@ def main():
               background:#e5e7eb !important;
               border-color:rgba(255,255,255,0.25) !important;
             }
+            /* Streamlit buttons often contain nested spans that were being forced to white by global rules */
+            button[kind="primary"] *, button[kind="secondary"] *, .stButton button *{
+              color:#000000 !important;
+              fill:#000000 !important;
+            }
             .stButton button:hover{filter:brightness(0.92);}
 
             /* alerts (st.info/st.success/st.warning/st.error)
