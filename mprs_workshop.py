@@ -57,7 +57,7 @@ TAGS = ["커뮤니케이션", "요구사항", "리소스", "권한", "프로세�
 
 # Sidebar
 with st.sidebar:
-    st.image("https://www.skenmove.com/assets/images/common/logo.png", width=150)
+    # (logo hidden)
     st.title("🤝 MPRS Workshop")
     st.info("SK엔무브 2026 협업 고도화를 위한 아이콘들의 목소리")
     st.caption("팁: 조별 대표 1명이 입력해도 됩니다. 의견 등록 시 From/To를 직접 선택하세요.")
