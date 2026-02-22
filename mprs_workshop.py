@@ -22,6 +22,10 @@ st.markdown("""
     .main { background-color: #f8f9fa; }
     .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #4A90E2; color: white; }
     .status-card { padding: 15px; border-radius: 10px; background-color: white; border-left: 10px solid #4A90E2; box-shadow: 2px 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; position: relative; }
+    /* Category tint: Bottleneck vs Synergy */
+    .bottleneck-card { background-color: #fff1f1; } /* light red tint */
+    .synergy-card { background-color: #fff9e6; }    /* light yellow tint */
+
     .ai-card { padding: 20px; border-radius: 10px; background-color: #f0f7ff; border: 1px solid #cce3ff; margin-bottom: 15px; position: relative; }
     .m-color { border-left-color: #ED1C24; } /* SK Red */
     .p-color { border-left-color: #FFB100; } /* SK Orange */
@@ -110,9 +114,10 @@ with tab_board:
                 for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in dept_feedback:
                     color_class = f"{source.lower()}-color"
 
-                    # 카드 요약(한눈에)
+                    # 카드 요약(한눈에) - 카테고리(병목/시너지) 배경색으로 즉시 구분
+                    cat_class = "bottleneck-card" if cat == "Bottleneck" else "synergy-card"
                     st.markdown(
-                        f"""<div class="status-card {color_class}">
+                        f"""<div class="status-card {color_class} {cat_class}">
                         <div class="vote-count">👍 {likes}</div>
                         <div class="from-label">From {source}  →  To {target} · {cat}</div>
                         <strong>{'📉' if cat=='Bottleneck' else '🌟'} {content}</strong><br/>
