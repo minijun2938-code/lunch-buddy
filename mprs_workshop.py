@@ -257,29 +257,23 @@ if tab_canvas is not None:
             bn_top = sorted(bn, key=lambda x: x[10], reverse=True)[:8]
             syn_top = sorted(syn, key=lambda x: x[10], reverse=True)[:8]
 
-            left, right = st.columns(2)
-            with left:
-                st.markdown("### 📉 병목 Top (득표순)")
-                bn_pick = st.selectbox(
-                    "캔버스에 올릴 병목 카드 선택",
-                    options=[f[0] for f in bn_top],
-                    format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in bn_top if x[0] == fid), str(fid)),
-                ) if bn_top else None
-            with right:
-                st.markdown("### 🌟 시너지 Top (득표순)")
-                syn_pick = st.selectbox(
-                    "캔버스에 올릴 시너지 카드 선택",
-                    options=[f[0] for f in syn_top],
-                    format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in syn_top if x[0] == fid), str(fid)),
-                ) if syn_top else None
+            # 작성할 카드 선택: 병목/시너지 중 하나만 선택하게 (숫자 선택 제거)
+            pick_kind = st.radio("카테고리 선택", ["📉 병목", "🌟 시너지"], horizontal=True)
 
-            # unify picks
-            pick_id = st.radio(
-                "작성할 카드 선택",
-                options=[x for x in [bn_pick, syn_pick] if x is not None],
-                format_func=lambda fid: f"{fid}",
-                horizontal=True,
-            ) if (bn_pick or syn_pick) else None
+            if pick_kind.startswith("📉"):
+                st.markdown("### 📉 병목 Top (득표순)")
+                pick_id = st.selectbox(
+                    "병목 카드 선택",
+                    options=[f[0] for f in bn_top],
+                    format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in bn_top if x[0] == fid), ""),
+                ) if bn_top else None
+            else:
+                st.markdown("### 🌟 시너지 Top (득표순)")
+                pick_id = st.selectbox(
+                    "시너지 카드 선택",
+                    options=[f[0] for f in syn_top],
+                    format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in syn_top if x[0] == fid), ""),
+                ) if syn_top else None
 
             if pick_id is None:
                 st.info("득표된 카드가 아직 없으면, 먼저 보드에서 투표를 진행해 주세요.")
