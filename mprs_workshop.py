@@ -124,35 +124,47 @@ with tab_matrix:
         st.plotly_chart(fig, use_container_width=True)
 
 with tab_ai:
-    st.subheader("🔮 AI 기반 협업 고도화 제안")
-    st.info("실시간 데이터를 분석하여 SK엔무브에 최적화된 협업 액션을 제안합니다.")
+    st.subheader("🔮 실시간 보드 기반 AI 협업 전략")
+    st.info("실시간 보드에 쌓인 부서별 의견과 투표 결과를 분석하여 SK엔무브에 최적화된 협업 방안을 도출합니다.")
     
-    if st.button("✨ 전략 리포트 및 협업 방안 도출", use_container_width=True):
+    if st.button("✨ 실시간 보드 분석 및 전략 도출", use_container_width=True):
         raw_feedback = db.get_all_feedback()
-        if not raw_feedback: st.warning("데이터가 부족합니다.")
+        if not raw_feedback: 
+            st.warning("분석할 데이터가 부족합니다. 실시간 보드에 의견을 먼저 등록해 주세요.")
         else:
-            with st.spinner("SK엔무브 MPRS 시너지 분석 및 혁신 방안 설계 중..."):
-                # Construct data context for the simulation
-                # (In a real LLM call, we'd send this to Gemini)
-                context_data = "\n".join([f"[{f[1]}->{f[2]}] {f[3]}: {f[5]} (심각도:{f[8]}, 난이도:{f[9]})" for f in raw_feedback])
+            with st.spinner("실시간 보드 데이터를 심층 분석 중..."):
+                # 1. 실시간 보드 데이터 가공 (AI 프롬프트용)
+                # (id, dept, target_dept, category, tag, content, situation, impact, severity, effort, likes, ts)
+                board_context = ""
+                for f in raw_feedback:
+                    board_context += f"- [From {f[1]} -> To {f[2]}] {f[3]}({f[4]}): {f[5]} (투표:{f[10]}, 심각도:{f[8]})\n"
+
+                # 2. AI 제안 생성 (실시간 보드 데이터를 기반으로 3대 과제 도출)
+                # 실제 환경에서는 Gemini API 등에 board_context를 전달합니다.
+                # 여기서는 보드 데이터의 주요 키워드와 투표수를 고려한 동적 제안 로직을 시뮬레이션합니다.
                 
-                # Mocking 3 distinct high-value suggestions based on common SK Enmove MPRS patterns
                 db.clear_ai_suggestions()
                 
-                # We'll generate 3 tailored suggestions
-                db.add_ai_suggestion(
-                    "기유 공정 데이터 실시간 시각화 & M-P 협업 채널 구축", 
-                    "Production의 생산 스케줄과 기유 품질 데이터를 Marketing 부서가 실시간 대시보드로 확인하여, 고객사의 긴급 발주나 스펙 문의에 즉각 대응하는 프로세스를 구축합니다."
-                )
-                db.add_ai_suggestion(
-                    "R&D-Production 통합 패스트트랙 실험 공정 운영", 
-                    "R&D에서 개발한 신규 윤활유 배합을 실제 Production 라인에서 소규모로 즉시 테스트할 수 있는 전용 실험 슬롯과 승인 간소화 절차를 마련하여 상용화 기간을 30% 단축합니다."
-                )
-                db.add_ai_suggestion(
-                    "Staff-MPRS 통합 'Energy Saving' 가치 지표 도입", 
-                    "단순 부서별 KPI를 넘어, Staff 부문 주도로 전사적인 '에너지 효율화' 기여도를 측정하는 공동 성과 지표를 설계하여 부서 간 리소스 이기주의를 타파하고 원팀 문화를 조성합니다."
-                )
-                st.success("AI가 분석한 3대 핵심 협업 방안이 도출되었습니다! 아래에서 가장 필요하다고 생각하는 방안에 투표해주세요.")
+                # 보드 데이터에서 투표가 가장 많은 상위 의견 추출
+                top_issues = sorted(raw_feedback, key=lambda x: x[10], reverse=True)[:3]
+                
+                for i, issue in enumerate(top_issues):
+                    source, target, content, likes = issue[1], issue[2], issue[5], issue[10]
+                    
+                    if issue[3] == "Bottleneck":
+                        title = f"[{target} 대상] {content} 해결 패스트트랙"
+                        detail = f"실시간 보드에서 {likes}표를 얻은 '{content}' 문제를 해결하기 위해, {source}와 {target} 부서가 주간 단위로 직접 소통하는 '현장 밀착형 협의체'를 구성하고 의사결정 단계를 2단계 단축합니다."
+                    else:
+                        title = f"[{source}-{target} 시너지] {content} 현실화 과제"
+                        detail = f"보드에서 제안된 '{content}' 아이디어를 실제 비즈니스 모델로 전환하기 위해, SK엔무브의 에너지 효율화 미션과 연계된 파일럿 프로젝트를 Q2 내에 런칭합니다."
+                    
+                    db.add_ai_suggestion(title, detail)
+                
+                # 만약 투표 데이터가 부족할 경우 보충 제안
+                if len(top_issues) < 3:
+                    db.add_ai_suggestion("MPRS 통합 데이터 거버넌스 수립", "부서별로 파편화된 공정, 연구, 마케팅 데이터를 하나의 SK Enmove 통합 플랫폼으로 연결하여 부서 간 정보 비대칭을 원천 차단합니다.")
+
+                st.success("실시간 보드 상의 핵심 이슈를 반영한 3대 전략 과제가 도출되었습니다! 아래에서 투표를 진행해 주세요.")
                 st.rerun()
 
     suggestions = db.get_ai_suggestions()
