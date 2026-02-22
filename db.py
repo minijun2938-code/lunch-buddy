@@ -1108,45 +1108,41 @@ def _rebuild_group_legacy_fields(host_user_id: int, date_str: str, *, meal: str 
     conn.close()
 
 
-def _auto_cancel_group_if_single(host_user_id: int, date_str: str):
-    """If only one member remains in the group, dissolve the group and clear remaining member status."""
-    members = list_group_members(host_user_id, date_str)
+def _auto_cancel_group_if_single(host_user_id: int, date_str: str, *, meal: str = "lunch"):
+    """If only one member remains, dissolve the group and clear remaining member status (per meal)."""
+    meal = _norm_meal(meal)
+    members = list_group_members(host_user_id, date_str, meal=meal)
     if len(members) != 1:
         return
 
-    remaining_uid, _remaining_name = members[0]
+    remaining_uid, _remaining_name, _remaining_en = members[0]
 
-    # cancel any accepted requests involving the remaining user today
     try:
-        cancel_accepted_for_users([int(remaining_uid)])
+        cancel_accepted_for_users([int(remaining_uid)], meal=meal)
     except Exception:
         pass
 
-    # clear status so it becomes (미정)
     try:
-        clear_status_today(int(remaining_uid))
+        clear_status_today(int(remaining_uid), meal=meal)
     except Exception:
         pass
 
-    # remove group data
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM group_members WHERE date=? AND host_user_id=?", (date_str, host_user_id))
-    c.execute("DELETE FROM lunch_groups WHERE date=? AND host_user_id=?", (date_str, host_user_id))
+    c.execute("DELETE FROM group_members WHERE date=? AND meal=? AND host_user_id=?", (date_str, meal, host_user_id))
+    c.execute("DELETE FROM lunch_groups WHERE date=? AND meal=? AND host_user_id=?", (date_str, meal, host_user_id))
     conn.commit()
     conn.close()
 
 
-def remove_member_from_group(host_user_id: int, user_id: int, date_str: str) -> tuple[bool, str | None]:
-    """Remove a member from a host group and increment seats_left.
-
-    If the group collapses to a single person, auto-cancel it.
-    """
+def remove_member_from_group(host_user_id: int, user_id: int, date_str: str, *, meal: str = "lunch") -> tuple[bool, str | None]:
+    """Remove a member from a host group and increment seats_left (per meal)."""
+    meal = _norm_meal(meal)
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "DELETE FROM group_members WHERE date=? AND host_user_id=? AND user_id=?",
-        (date_str, host_user_id, user_id),
+        "DELETE FROM group_members WHERE date=? AND meal=? AND host_user_id=? AND user_id=?",
+        (date_str, meal, host_user_id, user_id),
     )
     removed = c.rowcount > 0
     if not removed:
@@ -1154,14 +1150,14 @@ def remove_member_from_group(host_user_id: int, user_id: int, date_str: str) -> 
         return False, "멤버가 그룹에 없어요."
 
     c.execute(
-        "UPDATE lunch_groups SET seats_left = seats_left + 1 WHERE date=? AND host_user_id=?",
-        (date_str, host_user_id),
+        "UPDATE lunch_groups SET seats_left = seats_left + 1 WHERE date=? AND meal=? AND host_user_id=?",
+        (date_str, meal, host_user_id),
     )
     conn.commit()
     conn.close()
 
-    _rebuild_group_legacy_fields(host_user_id, date_str)
-    _auto_cancel_group_if_single(host_user_id, date_str)
+    _rebuild_group_legacy_fields(host_user_id, date_str, meal=meal)
+    _auto_cancel_group_if_single(host_user_id, date_str, meal=meal)
     return True, None
 
 
@@ -1356,12 +1352,12 @@ def cancel_booking_for_user(user_id: int, *, meal: str = "lunch") -> tuple[bool,
         """
         SELECT id, from_user_id, to_user_id
         FROM requests
-        WHERE date=? AND status='accepted' AND group_host_user_id IS NULL
+        WHERE date=? AND meal=? AND status='accepted' AND group_host_user_id IS NULL
           AND (from_user_id=? OR to_user_id=?)
         ORDER BY timestamp DESC
         LIMIT 1
         """,
-        (today, user_id, user_id),
+        (today, meal, user_id, user_id),
     )
     row = c.fetchone()
     if not row:
