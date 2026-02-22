@@ -197,16 +197,85 @@ with tab_ai:
                 # 보드 데이터에서 투표가 가장 많은 상위 의견 추출
                 top_issues = sorted(raw_feedback, key=lambda x: x[10], reverse=True)[:3]
                 
-                for i, issue in enumerate(top_issues):
-                    source, target, content, likes = issue[1], issue[2], issue[5], issue[10]
-                    
-                    if issue[3] == "Bottleneck":
-                        title = f"[{target} 대상] {content} 해결 패스트트랙"
-                        detail = f"실시간 보드에서 {likes}표를 얻은 '{content}' 문제를 해결하기 위해, {source}와 {target} 부서가 주간 단위로 직접 소통하는 '현장 밀착형 협의체'를 구성하고 의사결정 단계를 2단계 단축합니다."
-                    else:
-                        title = f"[{source}-{target} 시너지] {content} 현실화 과제"
-                        detail = f"보드에서 제안된 '{content}' 아이디어를 실제 비즈니스 모델로 전환하기 위해, SK엔무브의 에너지 효율화 미션과 연계된 파일럿 프로젝트를 Q2 내에 런칭합니다."
-                    
+                def _idea_pack(from_dept, to_dept, cat, tag, summary, situation, impact):
+                    """Return (title, content) ideas strictly grounded on board entry."""
+                    base = f"[From {from_dept} → To {to_dept}] {summary}"
+
+                    # common idea bullets
+                    ideas = []
+
+                    if cat == "Bottleneck":
+                        # templates by tag
+                        if tag in ("데이터", "툴/인프라"):
+                            ideas += [
+                                "협업 툴에 ‘실시간 데이터 공유 보드(단일 화면)’를 만들고, 핵심 지표/문서 링크를 한 곳으로 고정(핀)",
+                                "요청/응답을 메신저 DM이 아니라 ‘티켓(요청서) + 상태(접수/진행/완료)’로 관리해 누락을 줄이기",
+                            ]
+                        if tag in ("커뮤니케이션", "요구사항", "의사결정"):
+                            ideas += [
+                                f"{from_dept}-{to_dept} 정기 싱크(30분) 운영: 이번 주 이슈 3개만 정해서 합의/정리",
+                                "회의 전 ‘1페이지 브리프(목표/제약/결정필요/담당)’ 템플릿으로 의사결정 속도 올리기",
+                            ]
+                        if tag in ("프로세스", "권한", "리소스"):
+                            ideas += [
+                                "승인/결재 흐름을 ‘2단계’로 단순화(누가 최종결정인지 명확히)하고, 예외 케이스만 상향",
+                                "핵심 병목에 대해 ‘RACI(책임/승인/협의/공유)’ 한 장으로 역할을 고정",
+                            ]
+
+                        # fallback
+                        if not ideas:
+                            ideas += [
+                                f"{from_dept}-{to_dept} 간 담당자 1명씩 ‘단일 창구(SPOC)’ 지정해서 핑퐁 최소화",
+                                "업무/요청 정의를 예시 포함해서 문서화(‘이 수준이면 완료’ 기준 합의)",
+                            ]
+
+                        title = f"다득표 병목 해결 아이디어: {base}"
+
+                    else:  # Synergy
+                        if tag in ("데이터", "툴/인프라"):
+                            ideas += [
+                                "부서 간 공통 대시보드(품질/공정/클레임/시장반응)를 만들고, ‘같은 숫자’를 보게 만들기",
+                                "데이터 정의(용어/단위/주기)부터 합의해서 ‘해석 싸움’을 없애기",
+                            ]
+                        if tag in ("커뮤니케이션", "프로세스"):
+                            ideas += [
+                                "캠페인/제품/공정 변경 시 ‘런칭 체크리스트’를 공동으로 운영(변경점 공유→리스크 확인→커뮤니케이션)",
+                                "주요 프로젝트는 ‘공동 킥오프 + 주간 15분 스탠드업’으로 속도 유지",
+                            ]
+                        if tag in ("요구사항", "의사결정"):
+                            ideas += [
+                                "요구사항을 ‘문장’이 아니라 ‘수용기준(acceptance criteria)’로 맞추고 재작업을 줄이기",
+                                "결정이 필요한 안건은 ‘옵션 2~3개 + 트레이드오프’ 형태로 올려서 즉시 선택",
+                            ]
+
+                        if not ideas:
+                            ideas += [
+                                "작게 파일럿(2주) → 잘되면 확장하는 방식으로 실행 장벽 낮추기",
+                                "성과를 ‘부서별’이 아니라 ‘공동 KPI’로 한 번 묶어서 원팀화",
+                            ]
+
+                        title = f"다득표 시너지 확장 아이디어: {base}"
+
+                    # ground with board context
+                    context_lines = []
+                    if situation:
+                        context_lines.append(f"- 보드 상황: {situation}")
+                    if impact:
+                        context_lines.append(f"- 보드 영향/효과: {impact}")
+                    context_lines.append(f"- 보드 투표: {likes}표")
+
+                    content = "\n".join(
+                        context_lines
+                        + ["", "[해결/확대 아이디어] "]
+                        + [f"- {x}" for x in ideas[:4]]
+                    )
+                    return title, content
+
+                for issue in top_issues:
+                    # (id, dept, target_dept, category, tag, content, situation, impact, severity, effort, likes, ts)
+                    _, from_dept, to_dept, cat, tag, summary, situation, impact, *_rest = issue
+                    likes = issue[10]
+                    title, detail = _idea_pack(from_dept, to_dept, cat, tag, summary, situation, impact)
                     db.add_ai_suggestion(title, detail)
                 
                 # 만약 투표 데이터가 부족할 경우 보충 제안
