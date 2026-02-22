@@ -126,12 +126,19 @@ def main():
             }
             .stButton button:hover{filter:brightness(0.92);}
 
-            /* alerts (st.info/st.success/st.warning/st.error) */
-            [data-testid="stAlert"]{
-              background:rgba(255,255,255,0.06) !important;
-              border:1px solid rgba(255,255,255,0.14) !important;
+            /* alerts (st.info/st.success/st.warning/st.error)
+               일부 테마에서 alert 내부 텍스트가 어둡게 고정되는 케이스가 있어 selector를 강하게 잡음 */
+            [data-testid="stAlert"], .stAlert, div[role="alert"]{
+              background:#111827 !important; /* slate-900 */
+              border:1px solid rgba(255,255,255,0.16) !important;
             }
-            [data-testid="stAlert"] *{color:#e5e7eb !important;}
+            [data-testid="stAlert"] [data-testid="stMarkdownContainer"] *,
+            [data-testid="stAlert"] p, [data-testid="stAlert"] span, [data-testid="stAlert"] div,
+            .stAlert [data-testid="stMarkdownContainer"] *{
+              color:#f9fafb !important;
+            }
+            /* info box icon */
+            [data-testid="stAlert"] svg{color:#93c5fd !important; fill:#93c5fd !important;}
 
             /* expander/header blocks sometimes use light bg */
             [data-testid="stExpander"] details{background:rgba(255,255,255,0.04) !important;}
