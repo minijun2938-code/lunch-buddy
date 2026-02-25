@@ -96,10 +96,24 @@ def init_db():
     # Migration for older DBs: add missing columns if needed
     c.execute("PRAGMA table_info(action_items)")
     a_cols = [row[1] for row in c.fetchall()]
-    if "proposal" not in a_cols:
-        c.execute("ALTER TABLE action_items ADD COLUMN proposal TEXT")
-    if "author_id" not in a_cols:
-        c.execute("ALTER TABLE action_items ADD COLUMN author_id TEXT")
+    
+    # List of all columns that should exist (excluding id, feedback_id, created_at which are base)
+    required_cols = {
+        "proposal": "TEXT",
+        "author_id": "TEXT",
+        "category": "TEXT",
+        "from_dept": "TEXT",
+        "to_dept": "TEXT",
+        "summary": "TEXT",
+        "votes": "INTEGER DEFAULT 0"
+    }
+    
+    for col, col_type in required_cols.items():
+        if col not in a_cols:
+            try:
+                c.execute(f"ALTER TABLE action_items ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass # Column might have been added by another process
 
     c.execute("CREATE INDEX IF NOT EXISTS idx_action_items_feedback_id ON action_items(feedback_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_action_items_author_id ON action_items(author_id)")
