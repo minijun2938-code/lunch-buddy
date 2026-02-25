@@ -352,7 +352,7 @@ if tab_canvas is not None:
                                 votes=likes,
                                 proposal=proposal,
                             )
-                            st.session_state["cv_proposal"] = ""
+                            # st.session_state["cv_proposal"] = "" # handled by clear_on_submit
                             st.success("저장 완료")
                             st.rerun()
 
