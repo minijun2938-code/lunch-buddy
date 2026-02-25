@@ -66,8 +66,8 @@ st.markdown(
     .main { background-color: #f8f9fa; }
     .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #4A90E2; color: white; }
     .status-card { padding: 15px; border-radius: 10px; background-color: white; border-left: 10px solid #4A90E2; box-shadow: 2px 2px 8px rgba(0,0,0,0.1); margin-bottom: 14px; position: relative; }
-    /* Category tint: Bottleneck vs Synergy */
-    .bottleneck-card { background-color: #fff1f1; } /* light red tint */
+    /* Category tint: Bottleneck (Hidden) vs Synergy */
+    .bottleneck-card { background-color: #fff1f1; display: none; } /* light red tint, HIDDEN */
     .synergy-card { background-color: #ecfff2; }    /* light green tint */
 
     .ai-card { padding: 20px; border-radius: 10px; background-color: #f0f7ff; border: 1px solid #cce3ff; margin-bottom: 15px; position: relative; }
@@ -137,11 +137,6 @@ with st.sidebar:
 
         if st.button("🧪 성능테스트용 예시 데이터 넣기"):
             samples = [
-                # Bottlenecks
-                ("M", "R", "Bottleneck", "커뮤니케이션", "기술 용어가 너무 어려워서 메시지로 못 바꾸겠음", "신규 윤활유 제품 캠페인 초안 작성 단계", "광고/영업 자료 제작 지연, 고객 커뮤니케이션 품질 저하", 4, 2),
-                ("P", "M", "Bottleneck", "요구사항", "시장/고객 요구 변경이 현장에 너무 늦게 공유됨", "긴급 발주/스펙 변경 발생 시", "생산 스케줄 재조정 비용 증가, 납기 리스크", 5, 3),
-                ("R", "P", "Bottleneck", "프로세스", "시험 배합을 현장 검증까지 넘기는 절차가 너무 길다", "실험 배합 검증 후 파일럿 생산 전환 시", "상용화 리드타임 증가, 경쟁력 약화", 4, 4),
-                ("S", "P", "Bottleneck", "리소스", "설비/구매 관련 협업 요청이 건별로 흩어져 누락됨", "정기보수/부품 교체 요청이 몰릴 때", "다운타임 증가, 비용 예측 어려움", 3, 3),
                 # Synergies
                 ("M", "P", "Synergy", "데이터", "공정 데이터 기반 ‘Energy Saving’ 고객 제안서 패키지", "주요 고객사 기술 미팅 준비", "고객 신뢰 상승, 차별화된 기술영업 강화", 5, 3),
                 ("P", "R", "Synergy", "데이터", "품질 이상 징후 조기탐지(공정+랩 데이터) 룰셋 공동 구축", "품질 이슈 발생 전 사전 감지", "불량/클레임 감소, 안정 생산", 4, 4),
@@ -159,10 +154,8 @@ with st.sidebar:
             if not all_fb:
                 st.warning("먼저 '성능테스트용 예시 데이터 넣기'를 눌러 보드 데이터를 만든 후 실행해 주세요.")
             else:
-                # attach to top 2 bottlenecks + top 2 synergies
-                bn = [f for f in all_fb if f[3] == "Bottleneck"]
                 syn = [f for f in all_fb if f[3] == "Synergy"]
-                picks = (sorted(bn, key=lambda x: x[10], reverse=True)[:2] + sorted(syn, key=lambda x: x[10], reverse=True)[:2])
+                picks = sorted(syn, key=lambda x: x[10], reverse=True)[:4]
                 for row in picks:
                     fid, from_dept, to_dept, cat, tag, summary, situation, impact, sev, eff, likes, ts = row
                     proposal = "\n".join([
@@ -190,7 +183,7 @@ st.title("🚀 SK Enmove: MPRS Synergy Sync 2026")
 canvas_open = db.get_state("canvas_open", "0") == "1"
 todo_open = db.get_state("todo_open", "0") == "1"
 
-tabs = ["🗣️ 의견 남기기", "📉 병목 보드", "🌟 시너지 보드"]
+tabs = ["🗣️ 의견 남기기", "🌟 시너지 보드"]
 if canvas_open:
     tabs.append("🛠️ 아이디어 캔버스")
 if todo_open:
@@ -198,21 +191,24 @@ if todo_open:
 
 _tab_objs = st.tabs(tabs)
 if canvas_open and todo_open:
-    tab_speak, tab_bn, tab_syn, tab_canvas, tab_todo = _tab_objs
+    tab_speak, tab_syn, tab_canvas, tab_todo = _tab_objs
 elif canvas_open and not todo_open:
-    tab_speak, tab_bn, tab_syn, tab_canvas = _tab_objs
+    tab_speak, tab_syn, tab_canvas = _tab_objs
     tab_todo = None
 elif (not canvas_open) and todo_open:
-    tab_speak, tab_bn, tab_syn, tab_todo = _tab_objs
+    tab_speak, tab_syn, tab_todo = _tab_objs
     tab_canvas = None
 else:
-    tab_speak, tab_bn, tab_syn = _tab_objs
+    tab_speak, tab_syn = _tab_objs
     tab_canvas = None
     tab_todo = None
 
 
 def render_board(category: str):
     """category: 'Bottleneck' or 'Synergy'"""
+    if category == "Bottleneck":
+        return # Hidden as per request
+
     all_data = db.get_all_feedback()
     if not all_data:
         st.caption("의견이 없습니다.")
@@ -234,8 +230,8 @@ def render_board(category: str):
 
             for fid, source, target, cat, tag, content, sit, imp, sev, eff, likes, ts in dept_feedback:
                 color_class = f"{source.lower()}-color"
-                cat_class = "bottleneck-card" if category == "Bottleneck" else "synergy-card"
-                icon = "📉" if category == "Bottleneck" else "🌟"
+                cat_class = "synergy-card"
+                icon = "🌟"
 
                 st.markdown(
                     f"""<div class="status-card {color_class} {cat_class}">
@@ -270,76 +266,36 @@ with tab_speak:
     st.subheader("의견 남기기")
     st.caption("‘내 부문 선택’ 없이, 의견 등록 시 From/To를 직접 선택합니다. (조별 대표 입력 가능)")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        with st.form("bottleneck_form", clear_on_submit=True):
-            st.error("📉 병목 포인트")
-            ft1, ft2 = st.columns(2)
-            bn_from = ft1.selectbox("From", DEPT_KEYS, key="bn_from", format_func=lambda k: DEPT_MAP[k])
-            bn_target = ft2.selectbox("To", DEPT_KEYS, key="bn_to", format_func=lambda k: DEPT_MAP[k])
-            bn_tag = st.selectbox("분류", TAGS, key="bn_tag")
-            bn_content = st.text_input("문제 (한 줄 요약)")
-            bn_situation = st.text_area("구체적 상황 (언제/어디서?)")
-            bn_impact = st.text_area("부정적 영향 (시간/품질/리스크)")
-            sc1, sc2 = st.columns(2)
-            bn_sev = sc1.slider("심각도 (1-5)", 1, 5, 3)
-            bn_eff = sc2.slider("해결 난이도 (1-5)", 1, 5, 2)
-            if st.form_submit_button("등록") and bn_content:
-                db.add_feedback(
-                    bn_from,
-                    bn_target,
-                    "Bottleneck",
-                    bn_content,
-                    tag=bn_tag,
-                    situation=bn_situation,
-                    impact=bn_impact,
-                    severity=bn_sev,
-                    effort=bn_eff,
-                )
-                st.toast("등록되었습니다.")
-
-    with col2:
-        with st.form("synergy_form", clear_on_submit=True):
-            st.success("🌟 시너지 아이디어")
-            ft1, ft2 = st.columns(2)
-            syn_from = ft1.selectbox("From", DEPT_KEYS, key="syn_from", format_func=lambda k: DEPT_MAP[k])
-            syn_target = ft2.selectbox("To", DEPT_KEYS, key="syn_to", format_func=lambda k: DEPT_MAP[k])
-            syn_tag = st.selectbox("분류", TAGS, key="syn_tag")
-            syn_content = st.text_input("아이디어 (한 줄 요약)")
-            syn_situation = st.text_area("구체적 상황 (언제/어디서?)")
-            syn_impact = st.text_area("기대 효과")
-            sc1, sc2 = st.columns(2)
-            syn_sev = sc1.slider("기대 효과 (1-5)", 1, 5, 4)
-            syn_eff = sc2.slider("실행 난이도 (1-5)", 1, 5, 3)
-            if st.form_submit_button("등록") and syn_content:
-                db.add_feedback(
-                    syn_from,
-                    syn_target,
-                    "Synergy",
-                    syn_content,
-                    tag=syn_tag,
-                    situation=syn_situation,
-                    impact=syn_impact,
-                    severity=syn_sev,
-                    effort=syn_eff,
-                )
-                st.toast("등록되었습니다.")
-
-
-with tab_bn:
-    st.subheader("📉 병목 보드")
-    render_board("Bottleneck")
+    with st.form("synergy_form", clear_on_submit=True):
+        st.success("🌟 시너지 아이디어")
+        ft1, ft2 = st.columns(2)
+        syn_from = ft1.selectbox("From", DEPT_KEYS, key="syn_from", format_func=lambda k: DEPT_MAP[k])
+        syn_target = ft2.selectbox("To", DEPT_KEYS, key="syn_to", format_func=lambda k: DEPT_MAP[k])
+        syn_tag = st.selectbox("분류", TAGS, key="syn_tag")
+        syn_content = st.text_input("아이디어 (한 줄 요약)")
+        syn_situation = st.text_area("구체적 상황 (언제/어디서?)")
+        syn_impact = st.text_area("기대 효과")
+        sc1, sc2 = st.columns(2)
+        syn_sev = sc1.slider("기대 효과 (1-5)", 1, 5, 4)
+        syn_eff = sc2.slider("실행 난이도 (1-5)", 1, 5, 3)
+        if st.form_submit_button("등록") and syn_content:
+            db.add_feedback(
+                syn_from,
+                syn_target,
+                "Synergy",
+                syn_content,
+                tag=syn_tag,
+                situation=syn_situation,
+                impact=syn_impact,
+                severity=syn_sev,
+                effort=syn_eff,
+            )
+            st.toast("등록되었습니다.")
 
 
 with tab_syn:
     st.subheader("🌟 시너지 보드")
     render_board("Synergy")
-
-
-# AI 전략 리포트 기능은 현재 숨김 처리 (요청 반영)
-if False:
-    pass
 
 
 if tab_canvas is not None:
@@ -351,27 +307,15 @@ if tab_canvas is not None:
         if not all_data:
             st.info("먼저 보드에 의견을 등록해 주세요.")
         else:
-            bn = [f for f in all_data if f[3] == "Bottleneck"]
             syn = [f for f in all_data if f[3] == "Synergy"]
-            bn_top = sorted(bn, key=lambda x: x[10], reverse=True)[:8]
             syn_top = sorted(syn, key=lambda x: x[10], reverse=True)[:8]
 
-            pick_kind = st.radio("카테고리 선택", ["📉 병목", "🌟 시너지"], horizontal=True)
-
-            if pick_kind.startswith("📉"):
-                st.markdown("### 📉 병목 Top (득표순)")
-                pick_id = st.selectbox(
-                    "병목 카드 선택",
-                    options=[f[0] for f in bn_top],
-                    format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in bn_top if x[0] == fid), ""),
-                ) if bn_top else None
-            else:
-                st.markdown("### 🌟 시너지 Top (득표순)")
-                pick_id = st.selectbox(
-                    "시너지 카드 선택",
-                    options=[f[0] for f in syn_top],
-                    format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in syn_top if x[0] == fid), ""),
-                ) if syn_top else None
+            st.markdown("### 🌟 시너지 Top (득표순)")
+            pick_id = st.selectbox(
+                "시너지 카드 선택",
+                options=[f[0] for f in syn_top],
+                format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in syn_top if x[0] == fid), ""),
+            ) if syn_top else None
 
             if pick_id is None:
                 st.info("득표된 카드가 아직 없으면, 먼저 보드에서 투표를 진행해 주세요.")
@@ -415,6 +359,8 @@ if tab_canvas is not None:
             st.markdown("---")
             st.markdown("### 📌 저장된 캔버스 목록 (내가 작성한 것만)")
             items = db.get_action_items(author_id=author_id)
+            items = [it for it in items if it[2] == "Synergy"]
+
             if not items:
                 st.caption("아직 저장된 캔버스가 없습니다.")
             else:
@@ -440,205 +386,99 @@ if tab_canvas is not None:
                     use_container_width=True,
                 )
 
-            # 협업방안/To-do 생성은 별도 탭에서 진행 (관리자 오픈)
-
 
 if tab_todo is not None:
     with tab_todo:
         st.subheader("✅ 협업방안 생성 (유사도 기반 종합 To-do)")
         st.caption("모든 조의 캔버스 내용을 합쳐서 ‘유사한 제안’을 묶고, 중복을 제거한 종합 To-do 리스트를 만듭니다.")
 
-        # 이 탭은 관리자 오픈용이므로 전체 캔버스를 기준으로 생성
         items = db.get_action_items()
+        items = [it for it in items if it[2] == "Synergy"]
+
         if not items:
             st.info("캔버스에 저장된 항목이 없어서 To-do를 만들 수 없습니다.")
         else:
             import re
-
             sim_threshold = st.slider("유사도 묶기 기준(높을수록 더 엄격)", 0.2, 0.8, 0.35, 0.05)
 
             def _tokens(s: str):
                 s = (s or "").lower()
                 s = re.sub(r"[^0-9a-z가-힣\s]", " ", s)
                 toks = [t.strip() for t in s.split() if len(t.strip()) >= 2]
-                stop = {
-                    "그리고",
-                    "그런데",
-                    "하지만",
-                    "때문",
-                    "업무",
-                    "부서",
-                    "협업",
-                    "회의",
-                    "진행",
-                    "공유",
-                    "데이터",
-                    "툴",
-                    "인프라",
-                    "프로세스",
-                    "의사결정",
-                    "권한",
-                    "가능",
-                    "필요",
-                }
+                stop = {"그리고","그런데","하지만","때문","업무","부서","협업","회의","진행","공유","데이터","툴","인프라","프로세스","의사결정","권한","가능","필요"}
                 return set([t for t in toks if t not in stop])
 
             def _jaccard(a: set, b: set) -> float:
-                if not a and not b:
-                    return 0.0
+                if not a and not b: return 0.0
                 inter = len(a & b)
                 union = len(a | b)
                 return inter / union if union else 0.0
 
-            basis = st.radio(
-                "클러스터링 기준",
-                ["이슈(요약) 중심", "해결방안(제안) 중심"],
-                horizontal=True,
-                help="예시처럼 모든 조가 비슷한 해결 템플릿을 쓰면 '제안 중심'은 하나로 뭉칠 수 있어요. 보통은 '이슈(요약) 중심'이 안정적입니다.",
-            )
+            basis = st.radio("클러스터링 기준", ["이슈(요약) 중심", "해결방안(제안) 중심"], horizontal=True)
 
-            # Build text for similarity
             docs = []
             for r in items:
                 fid, author, cat, f, t, summary, votes, proposal, created_at = r
-                if basis.startswith("이슈"):
-                    # issue-centric: keep distinct problems even if proposals are templated
-                    text_for_sim = f"{cat} {f} {t} {summary}"
-                else:
-                    # proposal-centric: group similar solution ideas
-                    text_for_sim = f"{proposal} {summary}"
+                text_for_sim = f"{cat} {f} {t} {summary}" if basis.startswith("이슈") else f"{proposal} {summary}"
                 docs.append((r, _tokens(text_for_sim)))
 
-            # Union-find clustering
             parent = list(range(len(docs)))
-
             def find(x):
                 while parent[x] != x:
                     parent[x] = parent[parent[x]]
                     x = parent[x]
                 return x
-
             def union(a, b):
                 ra, rb = find(a), find(b)
-                if ra != rb:
-                    parent[rb] = ra
+                if ra != rb: parent[rb] = ra
 
             for i in range(len(docs)):
                 for j in range(i + 1, len(docs)):
-                    sim = _jaccard(docs[i][1], docs[j][1])
-                    if sim >= sim_threshold:
-                        union(i, j)
+                    if _jaccard(docs[i][1], docs[j][1]) >= sim_threshold: union(i, j)
 
             clusters = {}
             for idx in range(len(docs)):
-                r = find(idx)
-                clusters.setdefault(r, []).append(idx)
-
-            # Build aggregated TODO list
-            def _lines_from_proposal(p: str):
-                out = []
-                for ln in (p or "").splitlines():
-                    ln = ln.strip().lstrip("-• ").strip()
-                    if ln:
-                        out.append(ln)
-                return out
-
-            def _cluster_title(rows):
-                # pick highest votes item summary as title
-                rows_sorted = sorted(rows, key=lambda rr: rr[6], reverse=True)
-                top = rows_sorted[0]
-                return f"{top[5]}"
+                clusters.setdefault(find(idx), []).append(idx)
 
             def _cluster_todos(rows):
-                # combine & dedupe todo lines
-                seen = set()
-                todos = []
+                seen = set(); todos = []
                 for rr in rows:
-                    for ln in _lines_from_proposal(rr[7]):
-                        key = re.sub(r"\s+", " ", ln.lower())
-                        if key not in seen:
-                            seen.add(key)
-                            todos.append(ln)
+                    for ln in (rr[7] or "").splitlines():
+                        ln = ln.strip().lstrip("-• ").strip()
+                        if ln and re.sub(r"\s+", " ", ln.lower()) not in seen:
+                            seen.add(re.sub(r"\s+", " ", ln.lower())); todos.append(ln)
                 return todos
 
-            # sort clusters by total votes
             cluster_rows = []
             for _, idxs in clusters.items():
                 rows = [docs[i][0] for i in idxs]
-                total_votes = sum([r[6] for r in rows])
-                cluster_rows.append((total_votes, rows))
+                cluster_rows.append((sum([r[6] for r in rows]), rows))
             cluster_rows.sort(key=lambda x: x[0], reverse=True)
 
             if st.button("✨ 종합 To-do 생성", use_container_width=True):
                 import hashlib
-                # regenerate todo_items (votes are collected after generation)
                 db.clear_todos(keep_votes=True)
-
-                md = []
-                md.append("# SK Enmove MPRS Workshop - 종합 To-do List (캔버스 통합)")
-                md.append("")
-                md.append(f"- 전체 캔버스 항목: {len(items)}개")
-                md.append(f"- 유사도 기준(Jaccard): {sim_threshold}")
-                md.append(f"- 클러스터 수: {len(cluster_rows)}")
-                md.append("")
-
+                md = ["# SK Enmove MPRS Workshop - 종합 To-do List", ""]
                 for n, (tv, rows) in enumerate(cluster_rows, 1):
-                    title = _cluster_title(rows)
+                    title = sorted(rows, key=lambda rr: rr[6], reverse=True)[0][5]
                     md.append(f"## {n}. (총 {tv}표) {title}")
-                    md.append("- 포함된 논의(요약):")
-                    for rr in sorted(rows, key=lambda x: x[6], reverse=True):
-                        fid, author, cat, f, t, summary, votes, proposal, created_at = rr
-                        md.append(f"  - [{votes}표] {f}→{t} / {('병목' if cat=='Bottleneck' else '시너지')} / {summary}")
-
                     todos = _cluster_todos(rows)
-                    md.append("- To-do:")
-                    if todos:
-                        for k, x in enumerate(todos):
-                            # deterministic key based on group title + todo text
-                            key_src = (title + "||" + x).strip().lower()
-                            todo_key = hashlib.sha1(key_src.encode("utf-8")).hexdigest()[:16]
-                            order_index = (n * 1000) + k
-                            db.upsert_todo_item(todo_key, title, x, order_index)
-                            md.append(f"  - [ ] {x}")
-                    else:
-                        x = "(제안 내용이 비어있음) 캔버스에 해결 방안을 추가"
-                        key_src = (title + "||" + x).strip().lower()
-                        todo_key = hashlib.sha1(key_src.encode("utf-8")).hexdigest()[:16]
-                        order_index = (n * 1000)
-                        db.upsert_todo_item(todo_key, title, x, order_index)
+                    for k, x in enumerate(todos or ["(제안 내용 없음)"]):
+                        todo_key = hashlib.sha1((title + "||" + x).strip().lower().encode()).hexdigest()[:16]
+                        db.upsert_todo_item(todo_key, title, x, (n * 1000) + k)
                         md.append(f"  - [ ] {x}")
-                    md.append("")
-
                 st.session_state["canvas_todo"] = "\n".join(md)
 
-            # Display consolidated todo markdown + voting UI
             todo = st.session_state.get("canvas_todo")
             if todo:
                 st.markdown(todo)
-
                 st.markdown("---")
                 st.markdown("## 🗳️ To-do 투표")
-                st.caption("각 To-do 항목마다 1번씩 투표할 수 있습니다. (순서는 투표로 바뀌지 않음)")
-
                 todo_items = db.get_todo_items()
                 vote_counts = db.get_todo_vote_counts()
-
-                for todo_key, group_title, todo_text, order_index in todo_items:
-                    voted = db.has_voted_todo(todo_key, author_id)
-                    cnt = vote_counts.get(todo_key, 0)
+                for tk, gt, tt, oi in todo_items:
                     c1, c2 = st.columns([6, 1])
-                    with c1:
-                        st.write(f"- {todo_text}")
-                        st.caption(f"그룹: {group_title}")
-                    with c2:
-                        if st.button(f"👍 {cnt}", key=f"todo_vote_{todo_key}", disabled=voted):
-                            db.vote_todo(todo_key, author_id)
-                            st.rerun()
-
-                st.download_button(
-                    "📥 종합 To-do 다운로드 (Markdown)",
-                    data=todo.encode("utf-8"),
-                    file_name="mprs_todo_clustered.md",
-                    mime="text/markdown",
-                    use_container_width=True,
-                )
+                    c1.write(f"- {tt}"); c1.caption(f"그룹: {gt}")
+                    if c2.button(f"👍 {vote_counts.get(tk, 0)}", key=f"tv_{tk}", disabled=db.has_voted_todo(tk, author_id)):
+                        db.vote_todo(tk, author_id); st.rerun()
+                st.download_button("📥 다운로드", data=todo.encode(), file_name="todo.md")
