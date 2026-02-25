@@ -1744,7 +1744,7 @@ def get_all_statuses(*, meal: str = "lunch", viewer_friends_ids: list[int] | Non
         SELECT u.user_id, u.username, COALESCE(ds.status, 'Not Set') as status, u.telegram_chat_id, ds.kind
         FROM users u
         LEFT JOIN daily_status ds ON u.user_id = ds.user_id AND ds.date = ? AND ds.meal = ?
-        WHERE 1=1
+        WHERE (ds.status IS NOT NULL AND ds.status != 'Not Set')
     """
     params = [today, meal]
 
