@@ -308,14 +308,15 @@ if tab_canvas is not None:
             st.info("먼저 보드에 의견을 등록해 주세요.")
         else:
             syn = [f for f in all_data if f[3] == "Synergy"]
-            syn_top = sorted(syn, key=lambda x: x[10], reverse=True)[:8]
+            # syn_top = sorted(syn, key=lambda x: x[10], reverse=True)[:8] # Old: Limit 8
+            syn_all = sorted(syn, key=lambda x: x[10], reverse=True)       # New: Show all
 
-            st.markdown("### 🌟 시너지 Top (득표순)")
+            st.markdown("### 🌟 시너지 카드 선택 (전체)")
             pick_id = st.selectbox(
                 "시너지 카드 선택",
-                options=[f[0] for f in syn_top],
-                format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in syn_top if x[0] == fid), ""),
-            ) if syn_top else None
+                options=[f[0] for f in syn_all],
+                format_func=lambda fid: next((f"[{x[10]}표] {x[1]}→{x[2]} / {x[5]}" for x in syn_all if x[0] == fid), ""),
+            ) if syn_all else None
 
             if pick_id is None:
                 st.info("득표된 카드가 아직 없으면, 먼저 보드에서 투표를 진행해 주세요.")
@@ -357,8 +358,9 @@ if tab_canvas is not None:
                             st.rerun()
 
             st.markdown("---")
-            st.markdown("### 📌 저장된 캔버스 목록 (내가 작성한 것만)")
-            items = db.get_action_items(author_id=author_id)
+            st.markdown("### 📌 저장된 캔버스 목록 (전체 공유)")
+            # items = db.get_action_items(author_id=author_id) # Old: Only mine
+            items = db.get_action_items()                      # New: All
             items = [it for it in items if it[2] == "Synergy"]
 
             if not items:
